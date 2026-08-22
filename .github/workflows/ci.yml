@@ -1,0 +1,44 @@
+name: StokKita CI Pipeline
+
+# Pipeline akan berjalan otomatis setiap ada Push ke branch 'main'
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # Job 1: Mengecek Backend
+  build-backend:
+    name: Build Backend Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Test Build Backend
+        run: |
+          cd be
+          docker build -t stokkita-backend:test .
+
+  # Job 2: Mengecek Frontend
+  build-frontend:
+    name: Build Frontend Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Mengisi file .env palsu sementara hanya agar Vite bisa melakukan Build di server GitHub
+      - name: Create Mock ENV for Frontend
+        run: |
+          cd fe/cdp-project
+          echo "VITE_SUPABASE_URL=https://mock.supabase.co" > .env
+          echo "VITE_SUPABASE_ANON_KEY=mock-key" >> .env
+
+      - name: Test Build Frontend
+        run: |
+          cd fe/cdp-project
+          docker build -t stokkita-frontend:test .

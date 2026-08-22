@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    container_name: stokkita-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./be/.env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./fe/cdp-project
+      dockerfile: Dockerfile
+    container_name: stokkita-frontend
+    ports:
+      # Kita tetap map ke 5173 agar tidak bentrok CORS di backend
+      - "5173:80" 
+    depends_on:
+      - backend
+    restart: unless-stopped
