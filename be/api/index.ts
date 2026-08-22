@@ -10,6 +10,7 @@ import laporanRoutes from "./routes/laporan.js";
 import { ensureDefaultAdmin } from "./routes/auth.js";
 import { authenticateJWT } from "./middleware/auth.js";
 import pool from "./db.js";
+import { connectRedis } from "./redisClient.js";
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ async function startServer() {
   try {
     await pool.query("ALTER TABLE produk ADD COLUMN IF NOT EXISTS image_url TEXT");
     await ensureDefaultAdmin();
+    await connectRedis();
   } catch (error: any) {
     console.error("Gagal menyiapkan admin default atau kolom gambar:", error.message);
   }

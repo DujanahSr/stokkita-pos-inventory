@@ -1,11 +1,25 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
+import redisClient from "../redisClient.js";
 
 const router = express.Router();
 
 router.get("/", async (req: Request, res: Response) => {
   try {
     const periode = parseInt(req.query.periode as string) || 7;
+    const cacheKey = `laporan:dashboard:periode:${periode}`;
+
+    // 1. Cek apakah ada di cache Redis
+    if (redisClient.isOpen) {
+      const cachedData = await redisClient.get(cacheKey);
+      if (cachedData) {
+        console.log(`[Redis] Cache Hit untuk ${cacheKey}`);
+        res.json(JSON.parse(cachedData));
+        return;
+      }
+    }
+
+    console.log(`[Redis] Cache Miss untuk ${cacheKey}, query ke DB...`);
 
     const dashboardQuery = `
       SELECT
@@ -71,7 +85,7 @@ router.get("/", async (req: Request, res: Response) => {
       ORDER BY kekurangan DESC
     `);
 
-    res.json({
+    const responseData = {
       summary: {
         totalPenjualan:
           Number(dashboard.rows[0].total_penjualan),
@@ -88,7 +102,15 @@ router.get("/", async (req: Request, res: Response) => {
       topProduk: topProduk.rows,
 
       stokKritis: stokKritis.rows,
-    });
+    };
+
+    // 2. Simpan hasil query ke Redis (Expire 5 menit / 300 detik)
+    if (redisClient.isOpen) {
+      await redisClient.setEx(cacheKey, 300, JSON.stringify(responseData));
+      console.log(`[Redis] Data disimpan ke cache: ${cacheKey}`);
+    }
+
+    res.json(responseData);
 
   } catch (err) {
     console.error(err);
