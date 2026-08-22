@@ -18,7 +18,7 @@ export function calculateSafetyStock(
     }
   
     const safetyStock =
-      maxDailySales * maxLeadTime - avgDailySales * avgLeadTime;
+      maxDailySales * maxLeadTime + avgDailySales * avgLeadTime;
   
     // Safety stock tidak boleh negatif secara logis, minimal 0
     return Math.max(0, safetyStock);
