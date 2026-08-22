@@ -1,11 +1,11 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import pool from "../db.js";
 
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
-    const periode = parseInt(req.query.periode) || 7;
+    const periode = parseInt(req.query.periode as string) || 7;
 
     const dashboardQuery = `
       SELECT

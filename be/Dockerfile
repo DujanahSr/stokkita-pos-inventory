@@ -1,23 +1,26 @@
-# Gunakan image Node.js versi 20 yang ringan
-FROM node:20-alpine
+# === TAHAP 1: Proses Build TypeScript ===
+FROM node:20-alpine AS builder
 
-# Set folder kerja di dalam container
 WORKDIR /app
-
-# Install pnpm karena proyek ini menggunakan pnpm
 RUN npm install -g pnpm
 
-# Copy package.json dan pnpm-lock.yaml ke dalam container
 COPY package.json pnpm-lock.yaml ./
-
-# Install dependencies (frozen-lockfile agar versi pasti sama persis)
 RUN pnpm install --frozen-lockfile
 
-# Copy seluruh sisa kode backend ke dalam container
 COPY . .
+RUN pnpm run build
 
-# Beri tahu Docker bahwa aplikasi ini jalan di port 3000
+# === TAHAP 2: Production ===
+FROM node:20-alpine
+
+WORKDIR /app
+RUN npm install -g pnpm
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+
+COPY --from=builder /app/dist ./dist
+
 EXPOSE 3000
 
-# Perintah untuk menjalankan aplikasi saat container hidup
-CMD ["node", "api/index.js"]
+CMD ["node", "dist/api/index.js"]

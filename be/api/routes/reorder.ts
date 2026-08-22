@@ -1,11 +1,11 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
 //get semua po 
-router.get("/", async (req, res) => {
+router.get("/", async (req: Request, res: Response) => {
     try {
       const result = await pool.query(`
         SELECT
@@ -28,7 +28,7 @@ router.get("/", async (req, res) => {
   });
 
 //post buat po
-router.post("/", async (req, res) => {
+router.post("/", async (req: Request, res: Response) => {
 
     try {
   
@@ -47,9 +47,10 @@ router.post("/", async (req, res) => {
       );
   
       if (produk.rows.length === 0) {
-        return res.status(404).json({
+        res.status(404).json({
           message: "Produk tidak ditemukan"
         });
+        return;
       }
   
       const p = produk.rows[0];
@@ -98,7 +99,7 @@ router.post("/", async (req, res) => {
   });
 
 //put terima po
-router.put("/:id/terima", requireRole("admin"), async (req, res) => {
+router.put("/:id/terima", requireRole("admin"), async (req: Request, res: Response) => {
 
     const client =
       await pool.connect();
@@ -192,7 +193,7 @@ router.put("/:id/terima", requireRole("admin"), async (req, res) => {
         message: "PO diterima"
       });
   
-    } catch (err) {
+    } catch (err: any) {
   
       await client.query("ROLLBACK");
   
@@ -208,7 +209,7 @@ router.put("/:id/terima", requireRole("admin"), async (req, res) => {
   });
 
   //put batal po
-  router.put("/:id/batal", requireRole("admin"), async (req, res) => {
+  router.put("/:id/batal", requireRole("admin"), async (req: Request, res: Response) => {
 
     try {
   

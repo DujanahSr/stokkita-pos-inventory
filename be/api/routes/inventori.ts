@@ -1,13 +1,13 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
 
-const router = express.Router(); // koneksi PostgreSQL kamu
+const router = express.Router();
 
 // =========================
 // GET ALL PRODUK
 // =========================
-router.get("/", async (req, res) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       "SELECT * FROM produk ORDER BY created_at DESC"
@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
 // =========================
 // GET PRODUK BY ID
 // =========================
-router.get("/:id", async (req, res) => {
+router.get("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -32,7 +32,8 @@ router.get("/:id", async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Produk tidak ditemukan" });
+      res.status(404).json({ message: "Produk tidak ditemukan" });
+      return;
     }
 
     res.json(result.rows[0]);
@@ -45,7 +46,7 @@ router.get("/:id", async (req, res) => {
 // =========================
 // TAMBAH PRODUK
 // =========================
-router.post("/", requireRole("admin"), async (req, res) => {
+router.post("/", requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const {
       id,
@@ -78,7 +79,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
     );
 
     res.status(201).json(result.rows[0]);
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ message: "Gagal menambah produk", error: err.message });
   }
@@ -87,7 +88,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
 // =========================
 // UPDATE PRODUK
 // =========================
-router.put("/:id", requireRole("admin"), async (req, res) => {
+router.put("/:id", requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -129,7 +130,8 @@ router.put("/:id", requireRole("admin"), async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Produk tidak ditemukan" });
+      res.status(404).json({ message: "Produk tidak ditemukan" });
+      return;
     }
 
     res.json(result.rows[0]);
@@ -142,7 +144,7 @@ router.put("/:id", requireRole("admin"), async (req, res) => {
 // =========================
 // DELETE PRODUK
 // =========================
-router.delete("/:id", requireRole("admin"), async (req, res) => {
+router.delete("/:id", requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -152,7 +154,8 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Produk tidak ditemukan" });
+      res.status(404).json({ message: "Produk tidak ditemukan" });
+      return;
     }
 
     res.json({ message: "Produk berhasil dihapus" });

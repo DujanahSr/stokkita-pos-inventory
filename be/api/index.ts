@@ -36,7 +36,7 @@ async function startServer() {
   try {
     await pool.query("ALTER TABLE produk ADD COLUMN IF NOT EXISTS image_url TEXT");
     await ensureDefaultAdmin();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gagal menyiapkan admin default atau kolom gambar:", error.message);
   }
 

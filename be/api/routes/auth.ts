@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret";
 const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL || "admin@umkm.local";
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
 
-function sanitizeUser(user) {
+function sanitizeUser(user: any) {
   return {
     id: user.id,
     nama: user.nama,
@@ -36,15 +36,19 @@ export async function ensureDefaultAdmin() {
 }
 
 // Register (sekali pakai untuk admin pertama)
-router.post("/register", authenticateJWT, requireRole("admin"), async (req, res) => {
+router.post("/register", authenticateJWT, requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { nama, email, password, role = "kasir" } = req.body;
-    if (!nama || !email || !password)
-      return res.status(400).json({ message: "Semua field wajib diisi" });
+    if (!nama || !email || !password) {
+      res.status(400).json({ message: "Semua field wajib diisi" });
+      return;
+    }
 
     const existing = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
-    if (existing.rows.length > 0)
-      return res.status(400).json({ message: "Email sudah terdaftar" });
+    if (existing.rows.length > 0) {
+      res.status(400).json({ message: "Email sudah terdaftar" });
+      return;
+    }
 
     const hashed = await bcrypt.hash(password, 10);
     const result = await pool.query(
@@ -60,20 +64,26 @@ router.post("/register", authenticateJWT, requireRole("admin"), async (req, res)
 });
 
 // Login
-router.post("/login", async (req, res) => {
+router.post("/login", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "Email dan password wajib diisi" });
+    if (!email || !password) {
+      res.status(400).json({ message: "Email dan password wajib diisi" });
+      return;
+    }
 
     const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
-    if (result.rows.length === 0)
-      return res.status(401).json({ message: "Email atau password salah" });
+    if (result.rows.length === 0) {
+      res.status(401).json({ message: "Email atau password salah" });
+      return;
+    }
 
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid)
-      return res.status(401).json({ message: "Email atau password salah" });
+    if (!valid) {
+      res.status(401).json({ message: "Email atau password salah" });
+      return;
+    }
 
     const token = jwt.sign(
       {
@@ -97,7 +107,7 @@ router.post("/login", async (req, res) => {
 });
 
 // Me
-router.get("/me", authenticateJWT, async (req, res) => {
+router.get("/me", authenticateJWT, async (req: Request, res: Response) => {
   res.json({ user: req.user });
 });
 

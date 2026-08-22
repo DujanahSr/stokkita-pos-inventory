@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
 import PDFDocument from "pdfkit";
@@ -8,7 +8,7 @@ const router = express.Router();
 // =========================
 // GET ALL TRANSAKSI
 // =========================
-router.get("/", async (req, res) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT * FROM transaksi ORDER BY tanggal DESC`
@@ -24,7 +24,7 @@ router.get("/", async (req, res) => {
 // =========================
 // GET TRANSAKSI HARI INI (KPI DASHBOARD)
 // =========================
-router.get("/today", async (req, res) => {
+router.get("/today", async (req: Request, res: Response) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -45,7 +45,7 @@ router.get("/today", async (req, res) => {
 // =========================
 // TAMBAH TRANSAKSI
 // =========================
-router.post("/", async (req, res) => {
+router.post("/", async (req: Request, res: Response) => {
   const client = await pool.connect();
 
   try {
@@ -111,7 +111,7 @@ router.post("/", async (req, res) => {
 // =========================
 // DELETE TRANSAKSI (opsional)
 // =========================
-router.delete("/:id", requireRole("admin"), async (req, res) => {
+router.delete("/:id", requireRole("admin"), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -121,7 +121,8 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Transaksi tidak ditemukan" });
+      res.status(404).json({ message: "Transaksi tidak ditemukan" });
+      return;
     }
 
     res.json({ message: "Transaksi berhasil dihapus" });
@@ -134,12 +135,13 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
 // =========================
 // GET RECEIPT PDF
 // =========================
-router.get("/:id/receipt", async (req, res) => {
+router.get("/:id/receipt", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query("SELECT * FROM transaksi WHERE id = $1", [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Transaksi tidak ditemukan" });
+      res.status(404).json({ message: "Transaksi tidak ditemukan" });
+      return;
     }
 
     const t = result.rows[0];
@@ -174,7 +176,7 @@ router.get("/:id/receipt", async (req, res) => {
     doc.fontSize(8).text('Terima kasih atas pembelian Anda!', { align: 'center' });
 
     doc.end();
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     res.status(500).json({ message: 'Gagal membuat receipt', error: err.message });
   }
