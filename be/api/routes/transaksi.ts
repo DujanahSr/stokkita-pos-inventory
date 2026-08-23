@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
 import PDFDocument from "pdfkit";
+import redisClient from "../redisClient.js";
 
 const router = express.Router();
 
@@ -98,6 +99,16 @@ router.post("/", async (req: Request, res: Response) => {
 
     await client.query("COMMIT");
 
+    // Clear Dashboard Cache
+    try {
+      const keys = await redisClient.keys("laporan:dashboard:*");
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    } catch (cacheErr) {
+      console.error("Gagal menghapus cache Redis:", cacheErr);
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
@@ -123,6 +134,16 @@ router.delete("/:id", requireRole("admin"), async (req: Request, res: Response) 
     if (result.rows.length === 0) {
       res.status(404).json({ message: "Transaksi tidak ditemukan" });
       return;
+    }
+
+    // Clear Dashboard Cache
+    try {
+      const keys = await redisClient.keys("laporan:dashboard:*");
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+      }
+    } catch (cacheErr) {
+      console.error("Gagal menghapus cache Redis:", cacheErr);
     }
 
     res.json({ message: "Transaksi berhasil dihapus" });

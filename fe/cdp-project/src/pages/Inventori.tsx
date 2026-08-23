@@ -62,19 +62,30 @@ export default function Inventori() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = async () => {
+  const loadInventori = (showLoading = true) => {
     setError("");
-    try {
-      const res = await api.get("/produk");
-      setProduk(res.data);
-    } catch (err) {
-      setError(err.response?.data?.message || "Gagal memuat inventori");
-    } finally {
-      setInitialLoading(false);
-    }
+    if (showLoading) setInitialLoading(true);
+    api.get("/produk")
+      .then((res) => setProduk(res.data))
+      .catch((err) => setError(err.response?.data?.message || "Gagal memuat inventori"))
+      .finally(() => setInitialLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadInventori(true);
+
+    const channel = supabase
+      .channel('produk-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'produk' }, (payload) => {
+        console.log("Realtime: Inventori berubah!", payload);
+        loadInventori(false);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const filtered = produk.filter(
     (p) => p.nama.toLowerCase().includes(search.toLowerCase()) ||
@@ -119,7 +130,7 @@ export default function Inventori() {
         await api.post("/produk", payload);
       }
       setModal(false);
-      load();
+      loadInventori(false);
     } catch (err) {
       alert(err.message || err.response?.data?.message || "Gagal menyimpan");
     } finally {
@@ -127,10 +138,10 @@ export default function Inventori() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Hapus produk ini?")) return;
     await api.delete(`/produk/${id}`);
-    load();
+    loadInventori(false);
   };
 
   const handleImageChange = (file) => {

@@ -7,24 +7,46 @@ import StatCard from "../components/ui/StatCard";
 import SalesChart from "../components/charts/SalesChart";
 import Badge from "../components/ui/Badge";
 import api from "../api/axios";
+import supabase from "../lib/supabaseClient";
 import { TrendingUp, Package, ShoppingBag, AlertTriangle } from "lucide-react";
 
-const fmt = (v) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
+const fmt = (v: any) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
 export default function Dashboard() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<any>(null);
   const [periode, setPeriode] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    setLoading(true);
+  const loadDashboard = (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError("");
 
     api.get(`/laporan?periode=${periode}`)
       .then((res) => setData(res.data))
       .catch((err) => setError(err.response?.data?.message || "Gagal memuat dashboard"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadDashboard(true);
+
+    // Setup Supabase Realtime
+    const channel = supabase
+      .channel('dashboard-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transaksi' }, (payload) => {
+        console.log("Realtime: Transaksi berubah!", payload);
+        loadDashboard(false); // Update tanpa spinner loading
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'produk' }, (payload) => {
+        console.log("Realtime: Produk berubah!", payload);
+        loadDashboard(false);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [periode]);
 
   return (
