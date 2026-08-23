@@ -3,6 +3,8 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { authenticateJWT, requireRole } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { registerSchema, loginSchema } from "../schemas/index.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret";
@@ -36,7 +38,7 @@ export async function ensureDefaultAdmin() {
 }
 
 // Register (sekali pakai untuk admin pertama)
-router.post("/register", authenticateJWT, requireRole("admin"), async (req: Request, res: Response) => {
+router.post("/register", authenticateJWT, requireRole("admin"), validate(registerSchema), async (req: Request, res: Response) => {
   try {
     const { nama, email, password, role = "kasir" } = req.body;
     if (!nama || !email || !password) {
@@ -64,7 +66,7 @@ router.post("/register", authenticateJWT, requireRole("admin"), async (req: Requ
 });
 
 // Login
-router.post("/login", async (req: Request, res: Response) => {
+router.post("/login", validate(loginSchema), async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {

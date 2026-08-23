@@ -1,6 +1,8 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { produkSchema } from "../schemas/index.js";
 
 const router = express.Router();
 
@@ -46,7 +48,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 // =========================
 // TAMBAH PRODUK
 // =========================
-router.post("/", requireRole("admin"), async (req: Request, res: Response) => {
+router.post("/", requireRole("admin"), validate(produkSchema), async (req: Request, res: Response) => {
   try {
     const {
       id,
@@ -88,7 +90,7 @@ router.post("/", requireRole("admin"), async (req: Request, res: Response) => {
 // =========================
 // UPDATE PRODUK
 // =========================
-router.put("/:id", requireRole("admin"), async (req: Request, res: Response) => {
+router.put("/:id", requireRole("admin"), validate(produkSchema), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

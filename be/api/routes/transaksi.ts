@@ -3,6 +3,8 @@ import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
 import PDFDocument from "pdfkit";
 import redisClient from "../redisClient.js";
+import { validate } from "../middleware/validate.js";
+import { transaksiSchema } from "../schemas/index.js";
 
 const router = express.Router();
 
@@ -46,7 +48,7 @@ router.get("/today", async (req: Request, res: Response) => {
 // =========================
 // TAMBAH TRANSAKSI
 // =========================
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", validate(transaksiSchema), async (req: Request, res: Response) => {
   const client = await pool.connect();
 
   try {
