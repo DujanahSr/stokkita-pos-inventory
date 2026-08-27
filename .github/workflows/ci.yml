@@ -29,6 +29,7 @@ jobs:
       - name: Run Backend Tests
         run: |
           cd be
+          pnpm config set ignore-scripts true
           pnpm install --frozen-lockfile
           pnpm test
 

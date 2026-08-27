@@ -8,6 +8,7 @@ RUN npm install -g pnpm
 
 # Copy package files dan install dependencies
 COPY package.json pnpm-lock.yaml ./
+RUN pnpm config set ignore-scripts true
 RUN pnpm install --frozen-lockfile
 
 # Copy seluruh kode frontend (termasuk .env)

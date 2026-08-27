@@ -5,6 +5,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 COPY package.json pnpm-lock.yaml ./
+RUN pnpm config set ignore-scripts true
 RUN pnpm install --no-frozen-lockfile
 
 COPY . .
@@ -17,6 +18,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 COPY package.json pnpm-lock.yaml ./
+RUN pnpm config set ignore-scripts true
 RUN pnpm install --no-frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist

@@ -1,5 +1,0 @@
-allowBuilds:
-  - "@swc/core"
-  - "bcrypt"
-  - "esbuild"
-  - "unrs-resolver"
