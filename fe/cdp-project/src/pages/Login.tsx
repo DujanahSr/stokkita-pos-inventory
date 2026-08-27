@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Eye, EyeOff, ShoppingBag, TrendingUp, Package, Users } from "lucide-react";
 
@@ -314,7 +314,12 @@ export default function Login() {
               </button>
             </form>
 
-
+            <div className="mt-6 text-center text-sm text-white/70">
+              Belum punya akun UMKM?{" "}
+              <Link to="/register" className="text-amber-400 hover:text-amber-300 font-medium transition-colors">
+                Daftar sekarang
+              </Link>
+            </div>
           </div>
 
           {/* Footer */}

@@ -1,16 +1,15 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth.js";
 import inventoriRoutes from "./routes/inventori.js";
 import transaksiRoutes from "./routes/transaksi.js";
-import reorderRoutes from "./routes/reorder.js";
 import laporanRoutes from "./routes/laporan.js";
-import { ensureDefaultAdmin } from "./routes/auth.js";
+import reorderRoutes from "./routes/reorder.js";
 import { authenticateJWT } from "./middleware/auth.js";
-import pool from "./db.js";
 import { connectRedis } from "./redisClient.js";
+import { connectRabbitMQ, publishOrder } from "./rabbitmqClient.js";
 
 dotenv.config();
 
@@ -22,26 +21,34 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Public routes
 app.use("/api/auth", authRoutes);
-
-// Proteksi semua route data dengan JWT
-app.use("/api/produk", authenticateJWT, inventoriRoutes);
+app.use("/api/master", authenticateJWT, inventoriRoutes);
 app.use("/api/transaksi", authenticateJWT, transaksiRoutes);
-app.use("/api/reorder", authenticateJWT, reorderRoutes);
 app.use("/api/laporan", authenticateJWT, laporanRoutes);
+app.use("/api/reorder", authenticateJWT, reorderRoutes);
+app.use("/api/produk", authenticateJWT, (req, res) => res.json([]));
+
+// Webhook untuk simulasi E-Commerce
+app.post("/api/omnichannel/webhook", authenticateJWT, (req, res) => {
+    // Di dunia nyata, ini dipanggil oleh server Tokopedia/Shopee
+    const orderData = req.body;
+    orderData.order_id = `OMNI-${Date.now()}`;
+    
+    // Kirim ke RabbitMQ agar tidak membebani web server
+    publishOrder(orderData);
+    
+    res.json({ message: "Pesanan diterima dan masuk antrean pemrosesan" });
+});
 
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    await pool.query("ALTER TABLE produk ADD COLUMN IF NOT EXISTS image_url TEXT");
-    await ensureDefaultAdmin();
     await connectRedis();
+    await connectRabbitMQ();
   } catch (error: any) {
-    console.error("Gagal menyiapkan admin default atau kolom gambar:", error.message);
+    console.error("Gagal menyambung infrastruktur:", error.message);
   }
-
   app.listen(PORT, () => {
     console.log(`Server jalan di port ${PORT}`);
   });

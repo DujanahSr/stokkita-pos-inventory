@@ -1,330 +1,343 @@
 import { useEffect, useState } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
-import Modal from "../components/ui/Modal";
 import api from "../api/axios";
-import { Plus, Pencil, Trash2, Search, Hash, Tag, Layers, Truck, Database, ShieldAlert, ArrowDownLeft, ArrowUpRight, Image as ImageIcon } from "lucide-react";
-import supabase, { supabaseConfigured } from "../lib/supabaseClient";
+import { PackageSearch, MapPin, ArrowRightLeft, X } from "lucide-react";
 
-const fmt = (v) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
-const empty = { id: "", nama: "", kategori: "", stok: "", safety_stock: "", harga_beli: "", harga_jual: "", supplier: "", image_url: "" };
-
-const compressImage = async (file) => {
-  if (!file || !file.type.startsWith("image/")) return file;
-
-  const imageUrl = URL.createObjectURL(file);
-  const img = new Image();
-  img.src = imageUrl;
-
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
-  });
-
-  const maxWidth = 1200;
-  const maxHeight = 1200;
-  let { width, height } = img;
-
-  if (width > height) {
-    if (width > maxWidth) {
-      height = (height * maxWidth) / width;
-      width = maxWidth;
-    }
-  } else if (height > maxHeight) {
-    width = (width * maxHeight) / height;
-    height = maxHeight;
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, width, height);
-
-  const quality = file.type === "image/png" ? 0.9 : 0.8;
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || "image/jpeg", quality));
-  URL.revokeObjectURL(imageUrl);
-
-  if (!blob) return file;
-
-  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: blob.type || "image/jpeg" });
-};
+const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
 export default function Inventori() {
-  const [produk, setProduk] = useState([]);
-  const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [form, setForm] = useState(empty);
-  const [imageFile, setImageFile] = useState(null);
-  const [previewImage, setPreviewImage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedW, setSelectedW] = useState<string>("");
+  const [inventory, setInventory] = useState<any[]>([]);
 
-  const loadInventori = (showLoading = true) => {
-    setError("");
-    if (showLoading) setInitialLoading(true);
-    api.get("/produk")
-      .then((res) => setProduk(res.data))
-      .catch((err) => setError(err.response?.data?.message || "Gagal memuat inventori"))
-      .finally(() => setInitialLoading(false));
+  // Modal Transfer
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    to_warehouse_id: "",
+    variant_id: "",
+    qty: 0,
+  });
+  const [loadingTransfer, setLoadingTransfer] = useState(false);
+  const [transferError, setTransferError] = useState("");
+
+  const [activeTab, setActiveTab] = useState<"stok" | "mutasi">("stok");
+  const [transfers, setTransfers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === "mutasi") {
+      fetchTransfers();
+    }
+  }, [activeTab]);
+
+  const fetchTransfers = async () => {
+    try {
+      const res = await api.get("/master/transfers");
+      setTransfers(res.data);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
-    loadInventori(true);
-
-    const channel = supabase
-      .channel('produk-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'produk' }, (payload) => {
-        console.log("Realtime: Inventori berubah!", payload);
-        loadInventori(false);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    fetchWarehouses();
   }, []);
 
-  const filtered = produk.filter(
-    (p) => p.nama.toLowerCase().includes(search.toLowerCase()) ||
-           p.kategori.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    if (selectedW) {
+      fetchInventory(selectedW);
+    }
+  }, [selectedW]);
 
-  const openAdd = () => { setForm(empty); setEditMode(false); setImageFile(null); setPreviewImage(""); setModal(true); };
-  const openEdit = (p) => {
-    setForm({ ...p, harga_beli: p.harga_beli, harga_jual: p.harga_jual });
-    setEditMode(true);
-    setImageFile(null);
-    setPreviewImage(p.image_url || "");
-    setModal(true);
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
+  const fetchWarehouses = async () => {
     try {
-      let image_url = form.image_url;
-      if (imageFile) {
-        if (!supabaseConfigured || !supabase) {
-          throw new Error("Supabase belum dikonfigurasi. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.");
-        }
-
-        const uploadFile = imageFile.size > 1024 * 1024 ? await compressImage(imageFile) : imageFile;
-        const fileExt = uploadFile.name.split('.').pop();
-        const fileName = `${form.id || Date.now()}-${Date.now()}.${fileExt}`;
-        const { data, error } = await supabase.storage.from('produk-images').upload(fileName, uploadFile, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: uploadFile.type || 'image/jpeg',
-        });
-        if (error) throw error;
-        const { data: publicData } = supabase.storage.from('produk-images').getPublicUrl(data.path);
-        image_url = publicData.publicUrl;
-      }
-
-      const payload = { ...form, image_url };
-      if (editMode) {
-        await api.put(`/produk/${form.id}`, payload);
-      } else {
-        await api.post("/produk", payload);
-      }
-      setModal(false);
-      loadInventori(false);
+      const res = await api.get("/master/warehouses");
+      setWarehouses(res.data);
+      if (res.data.length > 0) setSelectedW(res.data[0].id);
     } catch (err) {
-      alert(err.message || err.response?.data?.message || "Gagal menyimpan");
-    } finally {
-      setLoading(false);
+      console.error(err);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Hapus produk ini?")) return;
-    await api.delete(`/produk/${id}`);
-    loadInventori(false);
+  const fetchInventory = async (wid: string) => {
+    try {
+      const res = await api.get(`/master/inventory/${wid}`);
+      setInventory(res.data);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleImageChange = (file) => {
-    setImageFile(file);
-    setPreviewImage(file ? URL.createObjectURL(file) : "");
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTransferError("");
+    setLoadingTransfer(true);
+    try {
+      await api.post("/master/transfer", {
+        from_warehouse_id: selectedW,
+        to_warehouse_id: transferForm.to_warehouse_id,
+        variant_id: transferForm.variant_id,
+        qty: Number(transferForm.qty)
+      });
+      alert("Mutasi stok berhasil!");
+      setIsModalOpen(false);
+      fetchInventory(selectedW);
+      fetchTransfers();
+      setTransferForm({ to_warehouse_id: "", variant_id: "", qty: 0 });
+    } catch (err: any) {
+      setTransferError(err.response?.data?.message || "Gagal mutasi stok");
+    } finally {
+      setLoadingTransfer(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50 font-sans">
       <Sidebar />
-      <div className="flex-1 lg:ml-60 ml-0 min-w-0">
-        <Navbar title="Inventori Produk" />
-        <main className="p-6 space-y-4">
-          {/* Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari produk..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <button
-              onClick={openAdd}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition w-full sm:w-auto"
-            >
-              <Plus className="w-4 h-4" />
-              Tambah Produk
-            </button>
-          </div>
+      <div className="flex-1 lg:ml-60 ml-0 min-w-0 flex flex-col">
+        <Navbar title="Inventori" />
+        <main className="flex-1 p-6 overflow-y-auto">
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h1 className="text-3xl font-bold flex items-center gap-2 text-slate-800">
+                  <PackageSearch className="text-emerald-600" size={32} />
+                  Sistem Manajemen Gudang (WMS)
+                </h1>
+                <p className="text-slate-500 mt-1">Multi-Warehouse Inventory & Variant Management</p>
+              </div>
 
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+              <div className="flex bg-slate-200 p-1 rounded-lg">
+                <button
+                  onClick={() => setActiveTab("stok")}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'stok' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Stok Gudang
+                </button>
+                <button
+                  onClick={() => setActiveTab("mutasi")}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'mutasi' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Riwayat Mutasi
+                </button>
+              </div>
             </div>
-          )}
 
-          {/* Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {initialLoading ? (
-              <div className="flex h-56 items-center justify-center text-slate-400">Memuat inventori...</div>
-            ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr className="text-xs text-slate-500 uppercase tracking-wide">
-                    <th className="text-left px-4 py-3">ID</th>
-                    <th className="text-left px-4 py-3">Gambar</th>
-                    <th className="text-left px-4 py-3">Nama Produk</th>
-                    <th className="text-left px-4 py-3">Kategori</th>
-                    <th className="text-right px-4 py-3">Stok</th>
-                    <th className="text-right px-4 py-3">Safety</th>
-                    <th className="text-right px-4 py-3">Harga Beli</th>
-                    <th className="text-right px-4 py-3">Harga Jual</th>
-                    <th className="text-left px-4 py-3">Supplier</th>
-                    <th className="text-center px-4 py-3">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={9} className="text-center py-10 text-slate-400">Tidak ada data</td></tr>
-                  )}
-                  {filtered.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50 transition">
-                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.id}</td>
-                      <td className="px-4 py-3">
-                        {p.image_url ? (
-                          <img src={p.image_url} alt={p.nama} className="h-10 w-10 rounded-lg object-cover" />
-                        ) : (
-                          <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-xs">No</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{p.nama}</td>
-                      <td className="px-4 py-3 text-slate-500">{p.kategori}</td>
-                      <td className={`px-4 py-3 text-right font-semibold ${p.stok < p.safety_stock ? "text-red-600" : "text-slate-700"}`}>{p.stok}</td>
-                      <td className="px-4 py-3 text-right text-slate-500">{p.safety_stock}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{fmt(p.harga_beli)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{fmt(p.harga_jual)}</td>
-                      <td className="px-4 py-3 text-slate-500">{p.supplier}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-500 transition">
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+            {activeTab === "stok" && (
+              <>
+                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <MapPin size={20} className="text-emerald-500" />
+                    <span className="font-semibold">Pilih Lokasi Gudang:</span>
+                    <select 
+                      className="bg-slate-50 border border-slate-200 p-2 rounded-lg font-medium focus:ring-2 focus:ring-emerald-500 outline-none ml-2"
+                      value={selectedW}
+                      onChange={e => setSelectedW(e.target.value)}
+                    >
+                      {warehouses.map(w => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button 
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+                  >
+                    <ArrowRightLeft size={18} />
+                    Mutasi Stok (Transfer)
+                  </button>
+                </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-100 text-sm">
+                      <th className="pb-3 font-semibold">Varian</th>
+                      <th className="pb-3 font-semibold">Harga Jual</th>
+                      <th className="pb-3 font-semibold text-center">Stok Fisik</th>
+                      <th className="pb-3 font-semibold text-center">Teknik Industri (EOQ/ROP)</th>
+                      <th className="pb-3 font-semibold text-center">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {inventory.length === 0 ? (
+                       <tr>
+                         <td colSpan={5} className="py-8 text-center text-slate-400">Belum ada barang di gudang ini.</td>
+                       </tr>
+                    ) : inventory.map((i) => (
+                      <tr key={i.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4">
+                          <div className="font-semibold text-slate-800">{i.product_name}</div>
+                          <div className="text-sm text-slate-500">{i.color} &bull; {i.size}</div>
+                        </td>
+                        <td className="py-4 text-emerald-600 font-medium">{fmt(i.price_sell)}</td>
+                        <td className="py-4 text-center text-xl font-bold text-slate-700">
+                           {i.qty}
+                        </td>
+                        <td className="py-4 text-center">
+                           <div className="inline-block text-left text-sm bg-slate-50 border border-slate-100 rounded-lg p-2">
+                             <div><span className="text-slate-400">EOQ:</span> <span className="font-bold text-slate-700">{i.eoq}</span></div>
+                             <div><span className="text-slate-400">ROP:</span> <span className="font-bold text-slate-700">{i.rop}</span></div>
+                           </div>
+                        </td>
+                        <td className="py-4 text-center">
+                          {i.qty <= i.rop ? (
+                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600 border border-red-200">
+                               Re-stock
+                             </span>
+                          ) : (
+                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-600 border border-emerald-200">
+                               Aman
+                             </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
+            </>
+            )}
+
+            {activeTab === "mutasi" && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Riwayat Mutasi Barang</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-slate-500 border-b border-slate-100 text-sm">
+                        <th className="pb-3 font-semibold">Tanggal</th>
+                        <th className="pb-3 font-semibold">Produk</th>
+                        <th className="pb-3 font-semibold">Dari Gudang</th>
+                        <th className="pb-3 font-semibold">Ke Gudang</th>
+                        <th className="pb-3 font-semibold text-center">Qty Mutasi</th>
+                        <th className="pb-3 font-semibold text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {transfers.length === 0 ? (
+                         <tr>
+                           <td colSpan={6} className="py-8 text-center text-slate-400">Belum ada riwayat mutasi.</td>
+                         </tr>
+                      ) : transfers.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-4 text-sm text-slate-600">
+                            {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </td>
+                          <td className="py-4">
+                            <div className="font-semibold text-slate-800">{t.product_name}</div>
+                            <div className="text-sm text-slate-500">{t.color} &bull; {t.size}</div>
+                          </td>
+                          <td className="py-4 font-medium text-slate-700">{t.from_warehouse}</td>
+                          <td className="py-4 font-medium text-slate-700">{t.to_warehouse}</td>
+                          <td className="py-4 text-center font-bold text-slate-800 text-lg">{t.qty}</td>
+                          <td className="py-4 text-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
+                              {t.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         </main>
       </div>
 
-      {/* Modal */}
-      <Modal open={modal} onClose={() => setModal(false)} title={editMode ? "Edit Produk" : "Tambah Produk"}>
-        <div className="space-y-3">
-          {[
-            { key: "id", label: "ID Produk", disabled: editMode, icon: Hash },
-            { key: "nama", label: "Nama", icon: Tag },
-            { key: "kategori", label: "Kategori", icon: Layers },
-            { key: "supplier", label: "Supplier", icon: Truck },
-          ].map(({ key, label, disabled, icon: Icon }) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-              <div className="relative">
-                <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={form[key]}
-                  disabled={disabled}
-                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-50 disabled:text-slate-400"
-                />
-              </div>
+      {/* Modal Mutasi */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-800">Mutasi Stok Gudang</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
             </div>
-          ))}
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { key: "stok", label: "Stok", icon: Database },
-              { key: "safety_stock", label: "Safety Stock", icon: ShieldAlert },
-              { key: "harga_beli", label: "Harga Beli", icon: ArrowDownLeft },
-              { key: "harga_jual", label: "Harga Jual", icon: ArrowUpRight },
-            ].map(({ key, label, icon: Icon }) => (
-              <div key={key}>
-                <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-                <div className="relative">
-                  <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="number"
-                    value={form[key]}
-                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Gambar Produk</label>
-              <div className="relative flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-slate-400" />
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleImageChange(e.target.files?.[0] || null)}
-                  className="w-full text-sm text-slate-700"
-                />
-              </div>
-            </div>
-            {(previewImage || form.image_url) && (
-              <div className="rounded-xl border border-slate-200 overflow-hidden w-32 h-32">
-                <img src={previewImage || form.image_url} alt="Preview" className="w-full h-full object-cover" />
+            
+            {transferError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200">
+                {transferError}
               </div>
             )}
-          </div>
 
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={() => setModal(false)}
-              className="flex-1 py-2 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50 transition"
-            >
-              Batal
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition"
-            >
-              {loading ? (imageFile ? "Mengupload gambar..." : "Menyimpan...") : "Simpan"}
-            </button>
+            <form onSubmit={handleTransfer} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Gudang Asal</label>
+                <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-600 font-medium">
+                  {warehouses.find(w => w.id === selectedW)?.name}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Pilih Produk (Varian)</label>
+                <select
+                  required
+                  value={transferForm.variant_id}
+                  onChange={(e) => setTransferForm({ ...transferForm, variant_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="">-- Pilih Varian --</option>
+                  {inventory.filter(i => i.qty > 0).map((i) => (
+                    <option key={i.variant_id} value={i.variant_id}>
+                      {i.product_name} ({i.color} - {i.size}) - Stok: {i.qty}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kuantitas (Qty)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={transferForm.qty || ""}
+                  onChange={(e) => setTransferForm({ ...transferForm, qty: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Gudang Tujuan</label>
+                <select
+                  required
+                  value={transferForm.to_warehouse_id}
+                  onChange={(e) => setTransferForm({ ...transferForm, to_warehouse_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="">-- Pilih Gudang Tujuan --</option>
+                  {warehouses.filter(w => w.id !== selectedW).map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingTransfer}
+                  className="flex-1 px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors disabled:opacity-70"
+                >
+                  {loadingTransfer ? "Memproses..." : "Transfer Sekarang"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }

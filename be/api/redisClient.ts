@@ -1,4 +1,4 @@
-import { createClient } from "redis";
+﻿import { createClient } from "redis";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -14,6 +14,13 @@ export async function connectRedis() {
     await redisClient.connect();
     console.log("Terhubung ke Redis");
   }
+}
+
+export async function clearCache(key: string) {
+    if (redisClient.isOpen) {
+        await redisClient.del(key);
+        console.log(`Cache cleared for key: ${key}`);
+    }
 }
 
 export default redisClient;

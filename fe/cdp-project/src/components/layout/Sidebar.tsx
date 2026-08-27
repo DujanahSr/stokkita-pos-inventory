@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -14,12 +14,12 @@ import {
   X,
 } from "lucide-react";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/inventori", icon: Package, label: "Inventori" },
-  { to: "/transaksi", icon: ArrowLeftRight, label: "Transaksi" },
-  { to: "/reorder", icon: ShoppingCart, label: "Purchase Order" },
-  { to: "/laporan", icon: BarChart3, label: "Laporan" },
+const allNavItems = [
+  { to: "/", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
+  { to: "/inventori", icon: Package, label: "Inventori", adminOnly: true },
+  { to: "/transaksi", icon: ArrowLeftRight, label: "Transaksi", adminOnly: false },
+  { to: "/reorder", icon: ShoppingCart, label: "Purchase Order", adminOnly: true },
+  { to: "/laporan", icon: BarChart3, label: "Laporan", adminOnly: true },
 ];
 
 const adminItems = [
@@ -72,7 +72,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {allNavItems.filter(item => !item.adminOnly || user?.role?.toLowerCase() === 'admin').map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -90,7 +90,7 @@ export default function Sidebar() {
             </NavLink>
           ))}
 
-          {user?.role === "admin" && (
+          {user?.role?.toLowerCase() === "admin" && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               {adminItems.map(({ to, icon: Icon, label }) => (
                 <NavLink

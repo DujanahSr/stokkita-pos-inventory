@@ -1,25 +1,62 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
-import Modal from "../components/ui/Modal";
-import Badge from "../components/ui/Badge";
+import { Package, RefreshCcw, Plus, Hash, Building2 } from "lucide-react";
 import api from "../api/axios";
-import { Plus, RefreshCcw, Package, Hash } from "lucide-react";
 
-const fmt = (value) => "Rp " + new Intl.NumberFormat("id-ID").format(value);
-const fmtDate = (value) => new Date(value).toLocaleDateString("id-ID", {
-	day: "2-digit",
-	month: "short",
-	year: "numeric",
-	hour: "2-digit",
-	minute: "2-digit",
-});
+function fmt(n) {
+	return new Intl.NumberFormat("id-ID", {
+		style: "currency",
+		currency: "IDR",
+		maximumFractionDigits: 0,
+	}).format(n || 0);
+}
 
-const emptyForm = { produk_id: "", qty: "" };
+function fmtDate(d) {
+	if (!d) return "-";
+	return new Intl.DateTimeFormat("id-ID", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(d));
+}
+
+function Badge({ status }) {
+	const colors = {
+		Menunggu: "bg-amber-100 text-amber-700 border-amber-200",
+		Selesai: "bg-emerald-100 text-emerald-700 border-emerald-200",
+		Batal: "bg-red-100 text-red-700 border-red-200",
+		Disarankan: "bg-blue-100 text-blue-700 border-blue-200",
+	};
+	const c = colors[status] || "bg-slate-100 text-slate-700 border-slate-200";
+	return (
+		<span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${c}`}>
+			{status}
+		</span>
+	);
+}
+
+function Modal({ open, onClose, title, children }) {
+	if (!open) return null;
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+			<div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
+				<div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+					<h3 className="font-semibold text-slate-800">{title}</h3>
+					<button onClick={onClose} className="text-slate-400 hover:text-slate-600">&times;</button>
+				</div>
+				<div className="p-6 overflow-y-auto max-h-[80vh]">
+					{children}
+				</div>
+			</div>
+		</div>
+	);
+}
 
 export default function Reorder() {
+	const emptyForm = { variant_id: "", warehouse_id: "", qty: "" };
 	const [purchaseOrders, setPurchaseOrders] = useState([]);
-	const [produk, setProduk] = useState([]);
+	const [variants, setVariants] = useState([]);
+	const [warehouses, setWarehouses] = useState([]);
 	const [open, setOpen] = useState(false);
 	const [form, setForm] = useState(emptyForm);
 	const [loading, setLoading] = useState(true);
@@ -31,13 +68,14 @@ export default function Reorder() {
 		setError("");
 
 		try {
-			const [poRes, produkRes] = await Promise.all([
+			const [poRes, varRes, whRes] = await Promise.all([
 				api.get("/reorder"),
-				api.get("/produk"),
+				api.get("/master/variants"),
+				api.get("/master/warehouses")
 			]);
-
 			setPurchaseOrders(poRes.data);
-			setProduk(produkRes.data);
+			setVariants(varRes.data);
+			setWarehouses(whRes.data);
 		} catch (err) {
 			setError(err.response?.data?.message || "Gagal memuat data purchase order");
 		} finally {
@@ -49,11 +87,9 @@ export default function Reorder() {
 		load();
 	}, []);
 
-	const productMap = useMemo(() => new Map(produk.map((item) => [item.id, item])), [produk]);
-
 	const handleCreate = async () => {
-		if (!form.produk_id || !form.qty) {
-			setError("Produk dan qty wajib diisi");
+		if (!form.variant_id || !form.warehouse_id || !form.qty) {
+			setError("Produk, gudang, dan qty wajib diisi");
 			return;
 		}
 
@@ -62,7 +98,8 @@ export default function Reorder() {
 
 		try {
 			await api.post("/reorder", {
-				produk_id: form.produk_id,
+				variant_id: form.variant_id,
+				warehouse_id: form.warehouse_id,
 				qty: Number(form.qty),
 			});
 
@@ -159,7 +196,7 @@ export default function Reorder() {
 													<td className="px-4 py-3 font-medium text-slate-800">
 														<div className="flex items-center gap-2">
 															<Package className="h-4 w-4 text-slate-400" />
-															<span>{productMap.get(po.produk_id)?.nama || po.nama}</span>
+															<span>{po.produk} ({po.variant})</span>
 														</div>
 													</td>
 													<td className="px-4 py-3 text-slate-500">{po.supplier}</td>
@@ -169,7 +206,7 @@ export default function Reorder() {
 													<td className="px-4 py-3 text-slate-500">{fmtDate(po.tanggal || po.created_at)}</td>
 													<td className="px-4 py-3">
 														<div className="flex items-center justify-center gap-2">
-															{po.status === "Menunggu" ? (
+															{po.status === "Menunggu" && (
 																<>
 																	<button
 																		onClick={() => handleAction(po.id, "terima")}
@@ -186,8 +223,18 @@ export default function Reorder() {
 																		Batal
 																	</button>
 																</>
-															) : (
-																<span className="text-xs text-slate-400">Selesai</span>
+															)}
+															{po.status === "Disarankan" && (
+																<button
+																	onClick={() => handleAction(po.id, "terima")}
+																	disabled={saving}
+																	className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+																>
+																	Terima Saran
+																</button>
+															)}
+															{(po.status === "Selesai" || po.status === "Batal") && (
+																<span className="text-xs text-slate-400">{po.status}</span>
 															)}
 														</div>
 													</td>
@@ -205,18 +252,37 @@ export default function Reorder() {
 			<Modal open={open} onClose={() => setOpen(false)} title="Buat Purchase Order">
 				<div className="space-y-4">
 					<div>
+						<label className="mb-1 block text-xs font-medium text-slate-600">Gudang Penerima</label>
+						<div className="relative">
+							<Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+							<select
+								value={form.warehouse_id}
+								onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })}
+								className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
+							>
+								<option value="">Pilih gudang</option>
+								{warehouses.map((w) => (
+									<option key={w.id} value={w.id}>
+										{w.name}
+									</option>
+								))}
+							</select>
+						</div>
+					</div>
+
+					<div>
 						<label className="mb-1 block text-xs font-medium text-slate-600">Produk</label>
 						<div className="relative">
 							<Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
 							<select
-								value={form.produk_id}
-								onChange={(e) => setForm({ ...form, produk_id: e.target.value })}
+								value={form.variant_id}
+								onChange={(e) => setForm({ ...form, variant_id: e.target.value })}
 								className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
 							>
 								<option value="">Pilih produk</option>
-								{produk.map((p) => (
-									<option key={p.id} value={p.id}>
-										{p.nama}
+								{variants.map((v) => (
+									<option key={v.id} value={v.id}>
+										{v.produk} ({v.variant})
 									</option>
 								))}
 							</select>

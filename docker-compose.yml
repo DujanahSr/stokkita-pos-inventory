@@ -12,6 +12,33 @@ services:
       - ./be/.env
     depends_on:
       - redis
+      - rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+
+  worker:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    container_name: stokkita-worker
+    command: ["node", "dist/api/worker.js"]
+    env_file:
+      - ./be/.env
+    depends_on:
+      - redis
+      - rabbitmq
+      - backend
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: stokkita-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
     restart: unless-stopped
 
   redis:
@@ -27,7 +54,6 @@ services:
       dockerfile: Dockerfile
     container_name: stokkita-frontend
     ports:
-      # Kita tetap map ke 5173 agar tidak bentrok CORS di backend
       - "5173:80" 
     depends_on:
       - backend

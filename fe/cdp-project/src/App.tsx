@@ -9,21 +9,22 @@ import Transaksi from "./pages/Transaksi";
 import Reorder from "./pages/Reorder";
 import Laporan from "./pages/Laporan";
 import Users from "./pages/Users";
+import Register from "./pages/Register";
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-      <Route path="/test" element={<h1>TEST MUNCUL NGGAK?</h1>} />
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/inventori" element={<ProtectedRoute><Inventori /></ProtectedRoute>} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/" element={<AdminRoute><Dashboard /></AdminRoute>} />
+          <Route path="/inventori" element={<AdminRoute><Inventori /></AdminRoute>} />
           <Route path="/transaksi" element={<ProtectedRoute><Transaksi /></ProtectedRoute>} />
-          <Route path="/reorder" element={<ProtectedRoute><Reorder /></ProtectedRoute>} />
-          <Route path="/laporan" element={<ProtectedRoute><Laporan /></ProtectedRoute>} />
+          <Route path="/reorder" element={<AdminRoute><Reorder /></AdminRoute>} />
+          <Route path="/laporan" element={<AdminRoute><Laporan /></AdminRoute>} />
           <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/transaksi" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

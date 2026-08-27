@@ -16,6 +16,27 @@ export default function Laporan() {
   const [periode, setPeriode] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async (type) => {
+    setIsExporting(true);
+    try {
+      const response = await api.get(`/laporan/export/${type}?periode=${periode}`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `laporan_${periode}_hari.${type === 'excel' ? 'xlsx' : 'pdf'}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      setError(`Gagal mengunduh laporan ${type.toUpperCase()}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -33,16 +54,36 @@ export default function Laporan() {
       <div className="flex-1 lg:ml-60 ml-0 min-w-0">
         <Navbar title="Laporan" />
         <main className="p-6 space-y-6">
-          {/* Filter */}
-          <div className="flex items-center gap-2">
-            {[7, 14, 30, 90].map((p) => (
-              <button key={p} onClick={() => setPeriode(p)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  periode === p ? "bg-emerald-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-emerald-300"
-                }`}>
-                {p} Hari
+          {/* Filter & Actions */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-2">
+              {[7, 14, 30, 90].map((p) => (
+                <button key={p} onClick={() => setPeriode(p)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                    periode === p ? "bg-emerald-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-emerald-300"
+                  }`}>
+                  {p} Hari
+                </button>
+              ))}
+            </div>
+
+            {/* Export Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleExport('excel')}
+                disabled={isExporting}
+                className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-semibold hover:bg-emerald-100 disabled:opacity-50 transition"
+              >
+                Export Excel (.xlsx)
               </button>
-            ))}
+              <button
+                onClick={() => handleExport('pdf')}
+                disabled={isExporting}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 transition"
+              >
+                {isExporting ? 'Memproses...' : 'Export PDF'}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -58,9 +99,10 @@ export default function Laporan() {
           ) : data ? (
             <>
               {/* Summary cards */}
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
                 {[
-                  { label: "Total Penjualan", val: fmt(data.summary.totalPenjualan), icon: TrendingUp, color: "green", sub: "Berdasarkan filter" },
+                  { label: "Omzet Penjualan", val: fmt(data.summary.totalPenjualan), icon: TrendingUp, color: "green", sub: "Berdasarkan filter" },
+                  { label: "Laba Kotor (Profit)", val: fmt(data.summary.totalLabaKotor), icon: TrendingUp, color: "emerald", sub: "Omzet - HPP" },
                   { label: "Total Transaksi", val: data.summary.totalTransaksi, icon: ShoppingBag, color: "green", sub: "Berdasarkan filter" },
                   { label: "Unit Terjual", val: data.summary.totalUnit, icon: Package, color: "amber", sub: "Berdasarkan filter" },
                   { label: "Nilai Stok", val: fmt(data.summary.totalNilaiStok), icon: Layers, color: "red", sub: "Keseluruhan" },

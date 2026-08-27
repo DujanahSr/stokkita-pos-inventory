@@ -18,7 +18,7 @@ export default function Users() {
     setStatus({ message: "", variant: "", loading: true });
 
     try {
-      const res = await api.post("/auth/register", { nama, email, password, role });
+      const res = await api.post("/auth/create-user", { nama, email, password, role });
       setStatus({ message: res.data.message || "User berhasil dibuat.", variant: "success", loading: false });
       setNama("");
       setEmail("");
@@ -47,7 +47,7 @@ export default function Users() {
               </p>
             </div>
 
-            {user?.role !== "admin" ? (
+            {user?.role?.toLowerCase() !== "admin" ? (
               <div className="bg-white rounded-xl border border-red-200 p-6 text-red-700">
                 <p className="font-semibold">Akses ditolak.</p>
                 <p className="mt-2 text-sm text-slate-500">Hanya admin yang dapat membuat user baru.</p>

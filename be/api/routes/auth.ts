@@ -4,77 +4,21 @@ import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { authenticateJWT, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { registerSchema, loginSchema } from "../schemas/index.js";
+import { loginSchema } from "../schemas/index.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "default_jwt_secret";
 
-const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL || "admin@umkm.local";
-const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
-
-function sanitizeUser(user: any) {
-  return {
-    id: user.id,
-    nama: user.nama,
-    email: user.email,
-    role: user.role,
-  };
-}
-
-export async function ensureDefaultAdmin() {
-  const existing = await pool.query("SELECT id FROM users WHERE email = $1", [DEFAULT_ADMIN_EMAIL]);
-
-  if (existing.rows.length > 0) {
-    return;
-  }
-
-  const hashed = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
-  await pool.query(
-    `INSERT INTO users (nama, email, password, role) VALUES ($1, $2, $3, $4)`,
-    ["Admin UMKM", DEFAULT_ADMIN_EMAIL, hashed, "admin"]
-  );
-
-  console.log(`Akun admin default dibuat: ${DEFAULT_ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD}`);
-}
-
-// Register (sekali pakai untuk admin pertama)
-router.post("/register", authenticateJWT, requireRole("admin"), validate(registerSchema), async (req: Request, res: Response) => {
-  try {
-    const { nama, email, password, role = "kasir" } = req.body;
-    if (!nama || !email || !password) {
-      res.status(400).json({ message: "Semua field wajib diisi" });
-      return;
-    }
-
-    const existing = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
-    if (existing.rows.length > 0) {
-      res.status(400).json({ message: "Email sudah terdaftar" });
-      return;
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      `INSERT INTO users (nama, email, password, role) VALUES ($1,$2,$3,$4) RETURNING id, nama, email, role`,
-      [nama, email, hashed, role]
-    );
-
-    res.status(201).json({ message: "Akun berhasil dibuat", user: result.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Login
 router.post("/login", validate(loginSchema), async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      res.status(400).json({ message: "Email dan password wajib diisi" });
-      return;
-    }
+    
+    // Join with tenants to get domain/name if needed
+    const result = await pool.query(
+      "SELECT u.*, t.name as tenant_name FROM users u JOIN tenants t ON u.tenant_id = t.id WHERE u.email = $1", 
+      [email]
+    );
 
-    const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
     if (result.rows.length === 0) {
       res.status(401).json({ message: "Email atau password salah" });
       return;
@@ -87,20 +31,20 @@ router.post("/login", validate(loginSchema), async (req: Request, res: Response)
       return;
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        nama: user.nama,
-        email: user.email,
-        role: user.role,
-      },
-      JWT_SECRET,
-      { expiresIn: "8h" }
-    );
+    const payload = {
+      id: user.id,
+      tenant_id: user.tenant_id,
+      tenant_name: user.tenant_name,
+      nama: user.name,
+      email: user.email,
+      role: user.role,
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" });
 
     res.json({
       token,
-      user: sanitizeUser(user),
+      user: payload,
     });
   } catch (err) {
     console.error(err);
@@ -108,7 +52,83 @@ router.post("/login", validate(loginSchema), async (req: Request, res: Response)
   }
 });
 
-// Me
+router.post("/register", async (req: Request, res: Response) => {
+  try {
+    const { perusahaan, nama, email, password } = req.body;
+    
+    // Validasi basic
+    if (!perusahaan || !nama || !email || !password) {
+      return res.status(400).json({ message: "Semua field harus diisi" });
+    }
+
+    // Cek email
+    const emailCheck = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({ message: "Email sudah terdaftar" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    await pool.query('BEGIN');
+    
+    // 1. Create Tenant
+    const tenantDomain = perusahaan.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const tenantRes = await pool.query(
+      "INSERT INTO tenants (name, domain) VALUES ($1, $2) RETURNING id",
+      [perusahaan, tenantDomain]
+    );
+    const tenant_id = tenantRes.rows[0].id;
+    
+    // 2. Create User (Admin)
+    await pool.query(
+      "INSERT INTO users (tenant_id, name, email, password, role) VALUES ($1, $2, $3, $4, 'Admin')",
+      [tenant_id, nama, email, hashedPassword]
+    );
+    
+    // 3. Create Default Warehouse
+    await pool.query(
+      "INSERT INTO warehouses (tenant_id, name, address, type) VALUES ($1, 'Gudang Pusat', 'Pusat', 'Main')",
+      [tenant_id]
+    );
+    
+    await pool.query('COMMIT');
+    
+    res.status(201).json({ message: "Registrasi berhasil, silakan login" });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.post("/create-user", authenticateJWT, requireRole("Admin"), async (req: Request, res: Response) => {
+  try {
+    const { nama, email, password, role } = req.body;
+    const { tenant_id } = req.user as any;
+
+    if (!nama || !email || !password || !role) {
+      return res.status(400).json({ message: "Semua field harus diisi" });
+    }
+
+    const emailCheck = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+    if (emailCheck.rows.length > 0) {
+      return res.status(400).json({ message: "Email sudah terdaftar" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    await pool.query(
+      "INSERT INTO users (tenant_id, name, email, password, role) VALUES ($1, $2, $3, $4, $5)",
+      [tenant_id, nama, email, hashedPassword, role === 'admin' ? 'Admin' : 'Kasir']
+    );
+
+    res.status(201).json({ message: "User/Kasir berhasil dibuat" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.get("/me", authenticateJWT, async (req: Request, res: Response) => {
   res.json({ user: req.user });
 });

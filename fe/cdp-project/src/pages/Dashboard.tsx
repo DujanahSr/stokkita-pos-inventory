@@ -85,8 +85,9 @@ export default function Dashboard() {
           ) : data ? (
             <>
               {/* Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                <StatCard label="Total Penjualan" value={fmt(data.summary.totalPenjualan)} icon={TrendingUp} color="green" sub={`${periode} hari terakhir`} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                <StatCard label="Omzet Penjualan" value={fmt(data.summary.totalPenjualan)} icon={TrendingUp} color="green" sub={`${periode} hari terakhir`} />
+                <StatCard label="Laba Kotor" value={fmt(data.summary.totalLabaKotor)} icon={TrendingUp} color="emerald" sub="Omzet - HPP" />
                 <StatCard label="Total Transaksi" value={data.summary.totalTransaksi} icon={ShoppingBag} color="green" sub={`${periode} hari terakhir`} />
                 <StatCard label="Unit Terjual" value={data.summary.totalUnit} icon={Package} color="amber" sub={`${periode} hari terakhir`} />
                 <StatCard label="Nilai Stok" value={fmt(data.summary.totalNilaiStok)} icon={Package} color="red" sub="Keseluruhan" />
