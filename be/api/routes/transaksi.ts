@@ -7,15 +7,25 @@ const router = express.Router();
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { tenant_id } = req.user as any;
-    const result = await pool.query(`
+    const { warehouse_id } = req.query;
+
+    let query = `
       SELECT t.*, w.name as warehouse_name, u.name as kasir_name 
       FROM transactions t
       JOIN warehouses w ON t.warehouse_id = w.id
       LEFT JOIN users u ON t.user_id = u.id
       WHERE t.tenant_id = $1
-      ORDER BY t.created_at DESC
-      LIMIT 50
-    `, [tenant_id]);
+    `;
+    const params: any[] = [tenant_id];
+
+    if (warehouse_id) {
+      query += ` AND t.warehouse_id = $2`;
+      params.push(warehouse_id);
+    }
+
+    query += ` ORDER BY t.created_at DESC LIMIT 50`;
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ message: "Server error" });
@@ -26,8 +36,12 @@ router.post("/", async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     const { tenant_id, id: user_id } = req.user as any;
-    const { warehouse_id, type, items } = req.body;
+    const { warehouse_id, type = "Penjualan", items, payment_method = "Tunai", payment_details = {} } = req.body;
     
+    if (!warehouse_id || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Data transaksi atau item keranjang tidak valid" });
+    }
+
     await client.query("BEGIN"); // START TRANSACTION (Concurrency Control)
     
     let total_amount = 0;
@@ -55,13 +69,14 @@ router.post("/", async (req: Request, res: Response) => {
       await client.query("UPDATE inventory SET qty = $1 WHERE id = $2", [newQty, invCheck.rows[0].id]);
     }
     
-    // Insert Transaction
+    // Insert Transaction with Payment Method & Details
     const tRes = await client.query(`
-      INSERT INTO transactions (tenant_id, warehouse_id, user_id, type, total_amount)
-      VALUES ($1, $2, $3, $4, $5) RETURNING id
-    `, [tenant_id, warehouse_id, user_id, type, total_amount]);
+      INSERT INTO transactions (tenant_id, warehouse_id, user_id, type, total_amount, payment_method, payment_details)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at
+    `, [tenant_id, warehouse_id, user_id, type, total_amount, payment_method, JSON.stringify(payment_details)]);
     
     const trxId = tRes.rows[0].id;
+    const createdAt = tRes.rows[0].created_at;
     
     // Insert Items
     for (let item of items) {
@@ -70,13 +85,45 @@ router.post("/", async (req: Request, res: Response) => {
         VALUES ($1, $2, $3, $4, $5)
       `, [trxId, item.variant_id, item.qty, item.price, item.qty * item.price]);
     }
+
+    // Update Cashier Shift if active
+    if (type === "Penjualan") {
+      let cashPart = 0;
+      let nonCashPart = 0;
+
+      if (payment_method === "Tunai") {
+        cashPart = total_amount;
+      } else if (payment_method === "Split" && payment_details?.split) {
+        const cashSplit = payment_details.split.find((s: any) => s.method === "Tunai");
+        cashPart = cashSplit ? Number(cashSplit.amount) : 0;
+        nonCashPart = total_amount - cashPart;
+      } else {
+        nonCashPart = total_amount;
+      }
+
+      await client.query(`
+        UPDATE cashier_shifts
+        SET 
+          total_sales = total_sales + $1,
+          total_cash_sales = total_cash_sales + $2,
+          total_non_cash_sales = total_non_cash_sales + $3
+        WHERE tenant_id = $4 AND warehouse_id = $5 AND user_id = $6 AND status = 'OPEN'
+      `, [total_amount, cashPart, nonCashPart, tenant_id, warehouse_id, user_id]);
+    }
     
     await client.query("COMMIT"); // COMMIT TRANSACTION
     
     // INVALIDATE CACHE REDIS
     await clearCache(`inventory:${warehouse_id}`);
     
-    res.json({ message: "Transaksi sukses", transaction_id: trxId });
+    res.json({ 
+      message: "Transaksi sukses", 
+      transaction_id: trxId,
+      created_at: createdAt,
+      payment_method,
+      payment_details,
+      total_amount
+    });
   } catch (err: any) {
     await client.query("ROLLBACK");
     res.status(400).json({ message: err.message });

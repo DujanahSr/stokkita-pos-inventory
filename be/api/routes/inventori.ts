@@ -179,4 +179,98 @@ router.get("/transfers", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/opname/:warehouse_id", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+    const { warehouse_id } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        sa.id,
+        p.name as product_name,
+        v.sku,
+        sa.expected_qty,
+        sa.actual_qty,
+        sa.difference,
+        sa.reason,
+        sa.created_at
+      FROM stock_adjustments sa
+      JOIN variants v ON sa.variant_id = v.id
+      JOIN products p ON v.product_id = p.id
+      WHERE sa.tenant_id = $1 AND sa.warehouse_id = $2
+      ORDER BY sa.created_at DESC
+      LIMIT 50
+    `, [tenant_id, warehouse_id]);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/opname", async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { tenant_id, id: user_id } = req.user as any;
+    const { warehouse_id, variant_id, actual_qty, reason } = req.body;
+
+    if (!warehouse_id || !variant_id || actual_qty === undefined || actual_qty < 0) {
+      return res.status(400).json({ message: "Parameter tidak lengkap" });
+    }
+
+    await client.query('BEGIN');
+
+    // Dapatkan stok sistem saat ini
+    const invRes = await client.query(
+      `SELECT id, qty FROM inventory WHERE warehouse_id = $1 AND variant_id = $2 FOR UPDATE`,
+      [warehouse_id, variant_id]
+    );
+
+    let expected_qty = 0;
+    let inv_id = null;
+
+    if (invRes.rows.length > 0) {
+      expected_qty = invRes.rows[0].qty;
+      inv_id = invRes.rows[0].id;
+    }
+
+    const difference = Number(actual_qty) - expected_qty;
+
+    if (difference === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: "Tidak ada selisih stok (stok sudah akurat)" });
+    }
+
+    // Catat riwayat opname ke stock_adjustments
+    await client.query(`
+      INSERT INTO stock_adjustments (tenant_id, warehouse_id, variant_id, expected_qty, actual_qty, difference, reason, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [tenant_id, warehouse_id, variant_id, expected_qty, Number(actual_qty), difference, reason || 'Opname rutin', user_id || null]);
+
+    if (inv_id) {
+      await client.query(`UPDATE inventory SET qty = $1 WHERE id = $2`, [Number(actual_qty), inv_id]);
+    } else {
+      await client.query(`
+        INSERT INTO inventory (warehouse_id, variant_id, qty)
+        VALUES ($1, $2, $3)
+      `, [warehouse_id, variant_id, Number(actual_qty)]);
+    }
+
+    await client.query('COMMIT');
+
+    if (redisClient.isOpen) {
+      await redisClient.del(`inventory:${warehouse_id}`);
+    }
+
+    res.json({ message: "Stock Opname berhasil disimpan, stok disesuaikan", difference });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

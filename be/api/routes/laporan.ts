@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import PDFDocument from "pdfkit";
+// @ts-ignore
 import ExcelJS from "exceljs";
 
 const router = express.Router();

@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
@@ -7,6 +7,8 @@ import inventoriRoutes from "./routes/inventori.js";
 import transaksiRoutes from "./routes/transaksi.js";
 import laporanRoutes from "./routes/laporan.js";
 import reorderRoutes from "./routes/reorder.js";
+import opnameRoutes from "./routes/opname.js";
+import shiftRoutes from "./routes/shift.js";
 import { authenticateJWT } from "./middleware/auth.js";
 import { connectRedis } from "./redisClient.js";
 import { connectRabbitMQ, publishOrder } from "./rabbitmqClient.js";
@@ -26,6 +28,8 @@ app.use("/api/master", authenticateJWT, inventoriRoutes);
 app.use("/api/transaksi", authenticateJWT, transaksiRoutes);
 app.use("/api/laporan", authenticateJWT, laporanRoutes);
 app.use("/api/reorder", authenticateJWT, reorderRoutes);
+app.use("/api/opname", authenticateJWT, opnameRoutes);
+app.use("/api/shift", authenticateJWT, shiftRoutes);
 app.use("/api/produk", authenticateJWT, (req, res) => res.json([]));
 
 // Webhook untuk simulasi E-Commerce
