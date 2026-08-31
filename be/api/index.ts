@@ -10,6 +10,8 @@ import reorderRoutes from "./routes/reorder.js";
 import opnameRoutes from "./routes/opname.js";
 import shiftRoutes from "./routes/shift.js";
 import produkRoutes from "./routes/produk.js";
+import auditRoutes from "./routes/audit.js";
+import omnichannelRoutes from "./routes/omnichannel.js";
 import { authenticateJWT } from "./middleware/auth.js";
 import { connectRedis } from "./redisClient.js";
 import { connectRabbitMQ, publishOrder } from "./rabbitmqClient.js";
@@ -32,6 +34,8 @@ app.use("/api/reorder", authenticateJWT, reorderRoutes);
 app.use("/api/opname", authenticateJWT, opnameRoutes);
 app.use("/api/shift", authenticateJWT, shiftRoutes);
 app.use("/api/produk", authenticateJWT, produkRoutes);
+app.use("/api/audit", authenticateJWT, auditRoutes);
+app.use("/api/omnichannel", authenticateJWT, omnichannelRoutes);
 
 // Webhook untuk simulasi E-Commerce
 app.post("/api/omnichannel/webhook", authenticateJWT, (req, res) => {
