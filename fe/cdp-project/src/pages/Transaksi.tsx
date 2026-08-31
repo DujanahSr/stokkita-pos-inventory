@@ -7,8 +7,20 @@ import api from "../api/axios";
 import { 
   Receipt, Plus, Trash2, Store, Printer, Barcode, 
   Wallet, QrCode, CreditCard, Layers, Clock, CheckCircle2, 
-  AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock
+  AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock,
+  Pause, Play, ShoppingCart, Bookmark
 } from "lucide-react";
+
+interface HeldCart {
+  id: string;
+  name: string;
+  notes?: string;
+  items: { variant_id: string; qty: number; price: number; name: string }[];
+  total: number;
+  held_at: string;
+  warehouse_id: string;
+  warehouse_name?: string;
+}
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v || 0);
 
@@ -35,6 +47,28 @@ export default function Transaksi() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [tipe, setTipe] = useState("Penjualan");
   const [cart, setCart] = useState<{ variant_id: string; qty: number; price: number; name: string }[]>([]);
+
+  // Multi-Cart / Hold Transaction State
+  const [heldCarts, setHeldCarts] = useState<HeldCart[]>(() => {
+    try {
+      const saved = localStorage.getItem("stokkita_held_carts");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
+  const [holdCartName, setHoldCartName] = useState("");
+  const [holdCartNotes, setHoldCartNotes] = useState("");
+  const [isHeldListModalOpen, setIsHeldListModalOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("stokkita_held_carts", JSON.stringify(heldCarts));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [heldCarts]);
 
   // Multi-Payment State
   const [paymentMethod, setPaymentMethod] = useState<"Tunai" | "QRIS" | "Debit" | "Split">("Tunai");
@@ -207,6 +241,60 @@ export default function Transaksi() {
 
   const cartTotal = cart.reduce((sum, c) => sum + c.qty * c.price, 0);
 
+  // Multi-Cart & Hold Transaksi Handlers
+  const handleOpenHoldModal = () => {
+    if (cart.length === 0) return alert("Keranjang belanja masih kosong, tidak ada transaksi yang perlu diparkir!");
+    const defaultLabel = `Antrean #${heldCarts.length + 1} (${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})`;
+    setHoldCartName(defaultLabel);
+    setHoldCartNotes("");
+    setIsHoldModalOpen(true);
+  };
+
+  const handleConfirmHoldCart = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cart.length === 0) return;
+    const currentWarehouseName = warehouses.find(w => w.id === selectedW)?.name || "";
+    const newHeldCart: HeldCart = {
+      id: `HOLD-${Date.now()}`,
+      name: holdCartName.trim() || `Antrean #${heldCarts.length + 1}`,
+      notes: holdCartNotes.trim() || undefined,
+      items: [...cart],
+      total: cartTotal,
+      held_at: new Date().toISOString(),
+      warehouse_id: selectedW,
+      warehouse_name: currentWarehouseName
+    };
+
+    setHeldCarts(prev => [newHeldCart, ...prev]);
+    setCart([]);
+    setIsHoldModalOpen(false);
+    setIsModalOpen(false);
+    alert(`Transaksi "${newHeldCart.name}" berhasil diparkir! Anda dapat melayani antrean pelanggan berikutnya.`);
+  };
+
+  const handleRecallCart = (heldCart: HeldCart) => {
+    if (cart.length > 0) {
+      if (!confirm(`Keranjang kasir saat ini sedang berisi ${cart.length} item. Apakah Anda ingin menimpa keranjang dengan antrean "${heldCart.name}"?`)) {
+        return;
+      }
+    }
+
+    if (heldCart.warehouse_id && heldCart.warehouse_id !== selectedW) {
+      setSelectedW(heldCart.warehouse_id);
+    }
+
+    setCart([...heldCart.items]);
+    setHeldCarts(prev => prev.filter(h => h.id !== heldCart.id));
+    setIsHeldListModalOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteHeldCart = (heldCartId: string, name: string) => {
+    if (confirm(`Apakah Anda yakin ingin membatalkan dan menghapus antrean terparkir "${name}"?`)) {
+      setHeldCarts(prev => prev.filter(h => h.id !== heldCartId));
+    }
+  };
+
   // Submit Transaction
   const handleSimpan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -355,11 +443,30 @@ export default function Transaksi() {
                   )}
                 </div>
 
+                {/* Tombol Antrean Diparkir */}
+                <button
+                  type="button"
+                  onClick={() => setIsHeldListModalOpen(true)}
+                  className={`px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all shadow-sm border ${
+                    heldCarts.length > 0
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <Pause size={16} />
+                  <span>Antrean Diparkir</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    heldCarts.length > 0 ? 'bg-white text-amber-800' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {heldCarts.length}
+                  </span>
+                </button>
+
                 <button 
                   onClick={handleOpenTransactionModal}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all shadow-sm"
                 >
-                  <Plus size={20} /> Transaksi Baru
+                  <Plus size={18} /> Transaksi Baru
                 </button>
               </div>
             </div>
@@ -412,6 +519,25 @@ export default function Transaksi() {
                 )}
               </div>
             </div>
+
+            {/* Banner Antrean Tertahan jika ada */}
+            {heldCarts.length > 0 && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex justify-between items-center text-xs text-amber-900 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Pause size={16} className="text-amber-600 flex-shrink-0" />
+                  <span>
+                    Terdapat <strong>{heldCarts.length} antrean transaksi</strong> yang sedang ditahan/diparkir.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsHeldListModalOpen(true)}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 transition"
+                >
+                  <Play size={13} /> Buka Daftar Antrean
+                </button>
+              </div>
+            )}
 
             {/* Table Riwayat Transaksi */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
@@ -731,10 +857,44 @@ export default function Transaksi() {
             </select>
           </div>
 
-          {/* Cart Table */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+          {/* Cart Header & Hold Actions */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Keranjang Belanja ({cart.length} Item)
+              </label>
+
+              <div className="flex items-center gap-2">
+                {/* Tombol Parkir / Hold Transaksi */}
+                <button
+                  type="button"
+                  disabled={cart.length === 0}
+                  onClick={handleOpenHoldModal}
+                  className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Simpan keranjang saat ini untuk melayani pembeli berikutnya"
+                >
+                  <Pause size={13} />
+                  <span>Parkir Transaksi</span>
+                </button>
+
+                {/* Tombol Buka Antrean Tertahan */}
+                {heldCarts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsHeldListModalOpen(true)}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <Bookmark size={13} />
+                    <span>Antrean ({heldCarts.length})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Cart Table */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                 <tr>
                   <th className="p-2.5 font-semibold">Produk</th>
                   <th className="p-2.5 font-semibold w-16 text-center">Qty</th>
@@ -772,6 +932,7 @@ export default function Transaksi() {
               <span className="font-semibold text-slate-600 text-sm">Total Belanja:</span>
               <span className="text-xl font-bold text-emerald-700">{fmt(cartTotal)}</span>
             </div>
+          </div>
           </div>
 
           {/* MULTI-PAYMENT METHOD SELECTOR */}
@@ -1010,6 +1171,156 @@ export default function Transaksi() {
           </div>
         </form>
       </Modal>
+
+      {/* MODAL 5: PARKIR TRANSAKSI / HOLD CART */}
+      {isHoldModalOpen && (
+        <Modal open={isHoldModalOpen} onClose={() => setIsHoldModalOpen(false)} title="Parkir / Tahan Transaksi Kasir">
+          <form onSubmit={handleConfirmHoldCart} className="space-y-4">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs text-amber-900">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Pause size={14} className="text-amber-600" />
+                <span>Simpan Keranjang Belanja Sementara</span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                Keranjang saat ini ({cart.length} item • Total {fmt(cartTotal)}) akan disimpan dan keranjang aktif akan direset untuk melayani pembeli berikutnya.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Nama / Label Antrean *</label>
+              <input
+                type="text"
+                required
+                value={holdCartName}
+                onChange={e => setHoldCartName(e.target.value)}
+                placeholder="Contoh: Pelanggan Baju Hitam / Meja 4"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
+              <input
+                type="text"
+                value={holdCartNotes}
+                onChange={e => setHoldCartNotes(e.target.value)}
+                placeholder="Misal: Tinggal ambil kaus kaki di rak 2"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            {/* Preview Items */}
+            <div className="border border-slate-200 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-1 bg-slate-50 text-xs">
+              {cart.map(c => (
+                <div key={c.variant_id} className="flex justify-between text-slate-700">
+                  <span className="truncate max-w-[200px] font-medium">{c.name} (x{c.qty})</span>
+                  <span className="font-semibold">{fmt(c.price * c.qty)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsHoldModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <Pause size={14} /> Simpan & Parkir Antrean
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL 6: DAFTAR TRANSAKSI DIPARKIR / HELD CARTS LIST */}
+      {isHeldListModalOpen && (
+        <Modal open={isHeldListModalOpen} onClose={() => setIsHeldListModalOpen(false)} title="Daftar Transaksi Diparkir">
+          <div className="space-y-3">
+            {heldCarts.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-xs">
+                Tidak ada antrean transaksi yang sedang diparkir.
+              </div>
+            ) : (
+              <div className="max-h-96 overflow-y-auto space-y-2.5 pr-1">
+                {heldCarts.map((hc, idx) => (
+                  <div key={hc.id} className="p-3.5 bg-white border border-slate-200 hover:border-amber-400 rounded-2xl shadow-sm space-y-2.5 transition">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-[10px] font-bold">
+                            #{idx + 1}
+                          </span>
+                          <span className="font-bold text-slate-800 text-sm">{hc.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 ml-7">
+                          <Clock size={12} />
+                          <span>{new Date(hc.held_at).toLocaleTimeString('id-ID')}</span>
+                          {hc.warehouse_name && <span>• {hc.warehouse_name}</span>}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="font-bold text-emerald-700 text-sm">{fmt(hc.total)}</div>
+                        <div className="text-[10px] text-slate-400 font-semibold">{hc.items.length} Macam Barang</div>
+                      </div>
+                    </div>
+
+                    {hc.notes && (
+                      <div className="p-2 bg-amber-50/60 rounded-xl text-[11px] text-amber-900 ml-7 italic">
+                        "{hc.notes}"
+                      </div>
+                    )}
+
+                    {/* Item list snapshot */}
+                    <div className="ml-7 space-y-1 text-xs text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      {hc.items.map((item, i) => (
+                        <div key={i} className="flex justify-between">
+                          <span className="truncate max-w-[220px]">{item.name}</span>
+                          <span className="font-semibold text-slate-800">{item.qty} pcs • {fmt(item.price * item.qty)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHeldCart(hc.id, hc.name)}
+                        className="px-3 py-1.5 text-red-500 hover:bg-red-50 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
+                      >
+                        <Trash2 size={13} /> Batalkan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRecallCart(hc)}
+                        className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+                      >
+                        <Play size={13} /> Lanjutkan Transaksi (Recall)
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setIsHeldListModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* MODAL 5: STRUK THERMAL DETAIL (RECEIPT) */}
       {receiptData && (
