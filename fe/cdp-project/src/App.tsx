@@ -5,6 +5,7 @@ import AdminRoute from "./routes/AdminRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Inventori from "./pages/Inventori";
+import Produk from "./pages/Produk";
 import Transaksi from "./pages/Transaksi";
 import Reorder from "./pages/Reorder";
 import Laporan from "./pages/Laporan";
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/" element={<AdminRoute><Dashboard /></AdminRoute>} />
+          <Route path="/produk" element={<AdminRoute><Produk /></AdminRoute>} />
           <Route path="/inventori" element={<AdminRoute><Inventori /></AdminRoute>} />
           <Route path="/transaksi" element={<ProtectedRoute><Transaksi /></ProtectedRoute>} />
           <Route path="/reorder" element={<AdminRoute><Reorder /></AdminRoute>} />

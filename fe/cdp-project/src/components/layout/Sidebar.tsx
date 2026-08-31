@@ -12,10 +12,12 @@ import {
   Users as UsersIcon,
   Menu,
   X,
+  Tag,
 } from "lucide-react";
 
 const allNavItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
+  { to: "/produk", icon: Tag, label: "Katalog Produk", adminOnly: true },
   { to: "/inventori", icon: Package, label: "Inventori", adminOnly: true },
   { to: "/transaksi", icon: ArrowLeftRight, label: "Transaksi", adminOnly: false },
   { to: "/reorder", icon: ShoppingCart, label: "Purchase Order", adminOnly: true },
