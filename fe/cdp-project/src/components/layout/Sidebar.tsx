@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Tag,
+  ShieldCheck,
 } from "lucide-react";
 
 const allNavItems = [
@@ -26,6 +27,7 @@ const allNavItems = [
 
 const adminItems = [
   { to: "/users", icon: UsersIcon, label: "User / Kasir" },
+  { to: "/audit", icon: ShieldCheck, label: "Audit Log & Keamanan" },
 ];
 
 export default function Sidebar() {

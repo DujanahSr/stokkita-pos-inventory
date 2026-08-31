@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
+import { logAudit } from "../utils/auditLogger.js";
 
 const router = express.Router();
 
@@ -64,7 +65,24 @@ router.post("/open", async (req: Request, res: Response) => {
       RETURNING *
     `, [tenant_id, warehouse_id, user_id, Number(start_cash), notes || "Buka Kasir"]);
 
-    res.status(201).json({ message: "Shift kasir berhasil dibuka", shift: result.rows[0] });
+    const newShift = result.rows[0];
+
+    // Non-blocking Audit Log
+    logAudit({
+      tenantId: tenant_id,
+      userId: user_id,
+      action: "SHIFT_OPEN",
+      module: "SHIFT",
+      details: {
+        shift_id: newShift.id,
+        warehouse_id,
+        start_cash: Number(start_cash),
+        notes: notes || "Buka Kasir"
+      },
+      ipAddress: req.ip || "127.0.0.1"
+    });
+
+    res.status(201).json({ message: "Shift kasir berhasil dibuka", shift: newShift });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Gagal membuka shift kasir" });
@@ -120,6 +138,22 @@ router.post("/close", async (req: Request, res: Response) => {
     await client.query("COMMIT");
 
     const closedShift = updateRes.rows[0];
+
+    // Non-blocking Audit Log
+    logAudit({
+      tenantId: tenant_id,
+      userId: user_id,
+      action: difference === 0 ? "SHIFT_CLOSE_BALANCED" : "SHIFT_CLOSE_VARIANCE",
+      module: "SHIFT",
+      details: {
+        shift_id: closedShift.id,
+        expected_cash: expectedCash,
+        end_cash_actual: actualCash,
+        difference: difference,
+        status: closedShift.status
+      },
+      ipAddress: req.ip || "127.0.0.1"
+    });
 
     res.json({
       message: "Shift kasir berhasil ditutup. Laporan Z-Report siap dicetak.",

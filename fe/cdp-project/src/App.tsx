@@ -10,6 +10,7 @@ import Transaksi from "./pages/Transaksi";
 import Reorder from "./pages/Reorder";
 import Laporan from "./pages/Laporan";
 import Users from "./pages/Users";
+import AuditLog from "./pages/AuditLog";
 import Register from "./pages/Register";
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/reorder" element={<AdminRoute><Reorder /></AdminRoute>} />
           <Route path="/laporan" element={<AdminRoute><Laporan /></AdminRoute>} />
           <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
+          <Route path="/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/transaksi" replace />} />
         </Routes>
       </BrowserRouter>

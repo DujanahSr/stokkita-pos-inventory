@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { clearCache } from "../redisClient.js";
+import { logAudit } from "../utils/auditLogger.js";
 
 const router = express.Router();
 
@@ -113,11 +114,27 @@ router.post("/", async (req: Request, res: Response) => {
     
     await client.query("COMMIT"); // COMMIT TRANSACTION
     
-    // INVALIDATE CACHE REDIS
+    // Clear Redis Cache
     await clearCache(`inventory:${warehouse_id}`);
+
+    // Non-blocking Audit Logging
+    logAudit({
+      tenantId: tenant_id,
+      userId: user_id,
+      action: `POS_TRANSACTION_${type.toUpperCase()}`,
+      module: "POS",
+      details: {
+        transaction_id: trxId,
+        type,
+        payment_method,
+        total_amount,
+        items_count: items.length
+      },
+      ipAddress: req.ip || "127.0.0.1"
+    });
     
-    res.json({ 
-      message: "Transaksi sukses", 
+    res.status(201).json({ 
+      message: "Transaksi berhasil", 
       transaction_id: trxId,
       created_at: createdAt,
       payment_method,

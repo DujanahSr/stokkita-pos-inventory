@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import redisClient from "../redisClient.js";
+import { logAudit } from "../utils/auditLogger.js";
 
 const router = express.Router();
 
@@ -143,6 +144,23 @@ router.post("/", async (req: Request, res: Response) => {
     if (redisClient.isOpen) {
       await redisClient.del(`inventory:${warehouse_id}`);
     }
+
+    // Non-blocking Audit Log
+    logAudit({
+      tenantId: tenant_id,
+      userId: user_id,
+      action: difference < 0 ? "STOCK_OPNAME_DEFICIT" : "STOCK_OPNAME_SURPLUS",
+      module: "INVENTORI",
+      details: {
+        warehouse_id,
+        variant_id,
+        expected_qty,
+        actual_qty: Number(actual_qty),
+        difference,
+        reason: reason || 'Opname fisik rutin'
+      },
+      ipAddress: req.ip || "127.0.0.1"
+    });
 
     res.json({ message: "Stock Opname berhasil disimpan dan stok disinkronkan", difference });
   } catch (err: any) {
