@@ -34,6 +34,50 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/lookup-receipt", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+    const { query } = req.query;
+
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({ message: "Nomor struk atau kode transaksi diperlukan" });
+    }
+
+    const cleanQuery = query.trim();
+
+    const trxRes = await pool.query(`
+      SELECT t.*, w.name as warehouse_name, u.name as kasir_name 
+      FROM transactions t
+      JOIN warehouses w ON t.warehouse_id = w.id
+      LEFT JOIN users u ON t.user_id = u.id
+      WHERE t.tenant_id = $1 AND (t.id::text ILIKE $2 OR t.id::text = $3)
+      ORDER BY t.created_at DESC LIMIT 1
+    `, [tenant_id, `${cleanQuery}%`, cleanQuery]);
+
+    if (trxRes.rows.length === 0) {
+      return res.status(404).json({ message: `Transaksi dengan kode "${cleanQuery}" tidak ditemukan!` });
+    }
+
+    const trx = trxRes.rows[0];
+
+    const itemsRes = await pool.query(`
+      SELECT ti.*, p.name as product_name, v.sku, v.size, v.color
+      FROM transaction_items ti
+      JOIN variants v ON ti.variant_id = v.id
+      JOIN products p ON v.product_id = p.id
+      WHERE ti.transaction_id = $1
+    `, [trx.id]);
+
+    res.json({
+      transaction: trx,
+      items: itemsRes.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal mencari data struk transaksi" });
+  }
+});
+
 router.post("/", async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
@@ -104,18 +148,33 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Update Member Points and Total Spent if member exists
-    if (member_id && type === "Penjualan") {
-      await client.query(`
-        UPDATE members 
-        SET 
-          points = GREATEST(0, points - $1 + $2),
-          total_spent = total_spent + $3
-        WHERE id = $4 AND tenant_id = $5
-      `, [redeemed_points, earned_points, final_amount, member_id, tenant_id]);
+    if (member_id) {
+      if (type === "Penjualan") {
+        await client.query(`
+          UPDATE members 
+          SET 
+            points = GREATEST(0, points - $1 + $2),
+            total_spent = total_spent + $3
+          WHERE id = $4 AND tenant_id = $5
+        `, [redeemed_points, earned_points, final_amount, member_id, tenant_id]);
+      } else if (type === "Retur") {
+        await client.query(`
+          UPDATE members 
+          SET 
+            total_spent = GREATEST(0, total_spent - $1)
+          WHERE id = $2 AND tenant_id = $3
+        `, [final_amount, member_id, tenant_id]);
+      }
     }
 
     // Update Cashier Shift if active
-    if (type === "Penjualan") {
+    const shiftRes = await client.query(
+      "SELECT id FROM cashier_shifts WHERE tenant_id = $1 AND warehouse_id = $2 AND user_id = $3 AND status = 'OPEN' LIMIT 1",
+      [tenant_id, warehouse_id, user_id]
+    );
+    const activeShiftId = shiftRes.rows[0]?.id;
+
+    if (type === "Penjualan" && activeShiftId) {
       let cashPart = 0;
       let nonCashPart = 0;
 
@@ -135,8 +194,27 @@ router.post("/", async (req: Request, res: Response) => {
           total_sales = total_sales + $1,
           total_cash_sales = total_cash_sales + $2,
           total_non_cash_sales = total_non_cash_sales + $3
-        WHERE tenant_id = $4 AND warehouse_id = $5 AND user_id = $6 AND status = 'OPEN'
-      `, [final_amount, cashPart, nonCashPart, tenant_id, warehouse_id, user_id]);
+        WHERE id = $4
+      `, [final_amount, cashPart, nonCashPart, activeShiftId]);
+    } else if (type === "Retur" && activeShiftId) {
+      // Retur: Pengembalian dana tunai (Cash Refund) memotong kas laci & mencatat mutasi kas keluar
+      const returnReason = req.body.return_reason || req.body.payment_details?.return_reason || "Pengembalian barang pelanggan";
+      
+      if (payment_method === "Tunai") {
+        await client.query(`
+          UPDATE cashier_shifts
+          SET 
+            total_sales = GREATEST(0, total_sales - $1),
+            total_cash_sales = GREATEST(0, total_cash_sales - $1)
+          WHERE id = $2
+        `, [final_amount, activeShiftId]);
+
+        // Catat otomatis ke cash_movements sebagai CASH_OUT (Refund)
+        await client.query(`
+          INSERT INTO cash_movements (tenant_id, warehouse_id, shift_id, user_id, type, amount, reason, created_at)
+          VALUES ($1, $2, $3, $4, 'CASH_OUT', $5, $6, NOW())
+        `, [tenant_id, warehouse_id, activeShiftId, user_id, final_amount, `Refund Retur: ${returnReason}`]);
+      }
     }
     
     await client.query("COMMIT"); // COMMIT TRANSACTION

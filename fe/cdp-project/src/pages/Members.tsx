@@ -7,6 +7,7 @@ import {
   Users, Award, Gift, Search, Plus, Phone, 
   Mail, Edit3, Trash2, Crown, Sparkles, TrendingUp 
 } from "lucide-react";
+import { toast } from "sonner";
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v || 0);
 
@@ -63,14 +64,15 @@ export default function Members() {
     try {
       if (editingMember) {
         await api.put(`/members/${editingMember.id}`, form);
+        toast.success(`Data member "${form.name}" berhasil diperbarui!`);
       } else {
         await api.post("/members", form);
+        toast.success(`Member baru "${form.name}" berhasil didaftarkan!`);
       }
       setIsModalOpen(false);
       fetchMembers();
-      alert("Data member berhasil disimpan!");
     } catch (err: any) {
-      alert("Gagal menyimpan member: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menyimpan member: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -80,9 +82,10 @@ export default function Members() {
     if (confirm(`Apakah Anda yakin ingin menghapus member "${name}"?`)) {
       try {
         await api.delete(`/members/${id}`);
+        toast.success(`Member "${name}" berhasil dihapus`);
         fetchMembers();
       } catch (err: any) {
-        alert("Gagal menghapus member: " + (err.response?.data?.message || err.message));
+        toast.error("Gagal menghapus member: " + (err.response?.data?.message || err.message));
       }
     }
   };

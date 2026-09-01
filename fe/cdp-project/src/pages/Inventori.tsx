@@ -3,6 +3,7 @@ import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
 import api from "../api/axios";
 import { PackageSearch, MapPin, ArrowRightLeft, X, Printer, FileText, Truck, Building2 } from "lucide-react";
+import { toast } from "sonner";
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
@@ -73,13 +74,15 @@ export default function Inventori() {
         actual_qty: Number(opnameForm.actual_qty),
         reason: opnameForm.reason
       });
-      alert(`Stock Opname berhasil disimpan! Selisih tercatat: ${res.data.difference > 0 ? `+${res.data.difference}` : res.data.difference}`);
+      toast.success(`Stock Opname berhasil disimpan! Selisih tercatat: ${res.data.difference > 0 ? `+${res.data.difference}` : res.data.difference}`);
       setIsOpnameModalOpen(false);
       fetchInventory(selectedW);
       fetchOpnames(selectedW);
       setOpnameForm({ variant_id: "", actual_qty: 0, reason: "" });
     } catch (err: any) {
-      setOpnameError(err.response?.data?.message || err.response?.data?.error || "Gagal melakukan opname");
+      const msg = err.response?.data?.message || err.response?.data?.error || "Gagal melakukan opname";
+      setOpnameError(msg);
+      toast.error(msg);
     } finally {
       setLoadingOpname(false);
     }
@@ -125,13 +128,15 @@ export default function Inventori() {
         variant_id: transferForm.variant_id,
         qty: Number(transferForm.qty)
       });
-      alert("Mutasi stok berhasil!");
+      toast.success("Mutasi transfer stok berhasil dikirim!");
       setIsModalOpen(false);
       fetchInventory(selectedW);
       fetchTransfers();
       setTransferForm({ to_warehouse_id: "", variant_id: "", qty: 0 });
     } catch (err: any) {
-      setTransferError(err.response?.data?.message || "Gagal mutasi stok");
+      const msg = err.response?.data?.message || "Gagal mutasi stok";
+      setTransferError(msg);
+      toast.error(msg);
     } finally {
       setLoadingTransfer(false);
     }

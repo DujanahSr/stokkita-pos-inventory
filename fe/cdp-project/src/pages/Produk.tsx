@@ -10,6 +10,7 @@ import {
   Search, Filter, Printer, Layers, Tag, DollarSign, 
   TrendingUp, CheckCircle2, ChevronDown, ChevronRight 
 } from "lucide-react";
+import { toast } from "sonner";
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v || 0);
 
@@ -104,7 +105,8 @@ export default function Produk() {
 
   const handleRemoveVariantRow = (index: number) => {
     if (newProductForm.variants.length === 1) {
-      return alert("Produk harus memiliki minimal 1 varian");
+      toast.warning("Produk harus memiliki minimal 1 varian");
+      return;
     }
     const updated = newProductForm.variants.filter((_, i) => i !== index);
     setNewProductForm({ ...newProductForm, variants: updated });
@@ -112,7 +114,10 @@ export default function Produk() {
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProductForm.name.trim()) return alert("Nama produk wajib diisi");
+    if (!newProductForm.name.trim()) {
+      toast.warning("Nama produk wajib diisi");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -126,9 +131,9 @@ export default function Produk() {
         ]
       });
       loadData();
-      alert("Produk dan varian berhasil ditambahkan!");
+      toast.success(`Produk "${newProductForm.name}" dan varian berhasil ditambahkan!`);
     } catch (err: any) {
-      alert("Gagal menambahkan produk: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menambahkan produk: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -145,10 +150,11 @@ export default function Produk() {
         category: editingProduct.category
       });
       setIsEditProductModal(false);
+      toast.success(`Produk "${editingProduct.name}" berhasil diperbarui!`);
       setEditingProduct(null);
       loadData();
     } catch (err: any) {
-      alert("Gagal memperbarui produk: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal memperbarui produk: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -160,9 +166,9 @@ export default function Produk() {
     try {
       await api.delete(`/produk/${id}`);
       loadData();
-      alert("Produk berhasil dihapus");
+      toast.success(`Produk "${name}" berhasil dihapus`);
     } catch (err: any) {
-      alert("Gagal menghapus produk: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menghapus produk: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -176,9 +182,9 @@ export default function Produk() {
       setIsAddVariantModal(false);
       setVariantForm({ sku: "", size: "40", color: "Hitam", price_buy: 100000, price_sell: 150000, rop: 10, eoq: 30, initial_stock: 0 });
       loadData();
-      alert("Varian baru berhasil ditambahkan!");
+      toast.success(`Varian baru "${variantForm.sku}" berhasil ditambahkan!`);
     } catch (err: any) {
-      alert("Gagal menambahkan varian: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menambahkan varian: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -194,9 +200,9 @@ export default function Produk() {
       setIsEditVariantModal(false);
       setEditingVariant(null);
       loadData();
-      alert("Varian berhasil diperbarui!");
+      toast.success("Varian berhasil diperbarui!");
     } catch (err: any) {
-      alert("Gagal memperbarui varian: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal memperbarui varian: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -208,9 +214,9 @@ export default function Produk() {
     try {
       await api.delete(`/produk/variants/${variantId}`);
       loadData();
-      alert("Varian berhasil dihapus");
+      toast.success(`Varian "${sku}" berhasil dihapus`);
     } catch (err: any) {
-      alert("Gagal menghapus varian: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menghapus varian: " + (err.response?.data?.message || err.message));
     }
   };
 

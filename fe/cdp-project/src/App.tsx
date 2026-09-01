@@ -14,9 +14,12 @@ import AuditLog from "./pages/AuditLog";
 import Members from "./pages/Members";
 import Register from "./pages/Register";
 
+import { Toaster } from "sonner";
+
 export default function App() {
   return (
     <AuthProvider>
+      <Toaster richColors position="top-right" closeButton />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />

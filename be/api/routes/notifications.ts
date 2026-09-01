@@ -14,7 +14,6 @@ router.get("/", async (req: Request, res: Response) => {
         SELECT 
           i.qty,
           COALESCE(v.rop, 10) as rop,
-          COALESCE(v.safety_stock, 10) as safety_stock,
           v.sku,
           p.name as product_name,
           w.name as warehouse_name
@@ -23,7 +22,7 @@ router.get("/", async (req: Request, res: Response) => {
         JOIN products p ON v.product_id = p.id
         JOIN warehouses w ON i.warehouse_id = w.id
         WHERE p.tenant_id = $1 
-          AND (i.qty <= COALESCE(v.rop, 10) OR i.qty <= COALESCE(v.safety_stock, 10))
+          AND (i.qty <= COALESCE(v.rop, 10))
         ORDER BY i.qty ASC
         LIMIT 10
       `, [tenant_id]);
@@ -39,7 +38,7 @@ router.get("/", async (req: Request, res: Response) => {
         `, [tenant_id, title]);
 
         if (existCheck.rows.length === 0) {
-          const limit = Math.max(Number(row.rop), Number(row.safety_stock));
+          const limit = Number(row.rop) || 10;
           const msg = `Sisa stok di ${row.warehouse_name} saat ini ${row.qty} pcs (Batas aman: ${limit} pcs). Segera lakukan Purchase Order!`;
           await pool.query(`
             INSERT INTO notifications (tenant_id, type, title, message, is_read, link, created_at)

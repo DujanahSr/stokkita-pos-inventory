@@ -13,6 +13,7 @@ import {
   Zap, Server, Layers, Clock, ArrowRight, Play, CheckCircle2,
   DollarSign, Percent, Archive, Sparkles, Flame
 } from "lucide-react";
+import { toast } from "sonner";
 
 const fmt = (v: any) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
@@ -87,7 +88,7 @@ export default function Dashboard() {
         channel_filter: simChannel
       });
 
-      setSimSuccessMsg(res.data.message);
+      toast.success(res.data.message || "Simulasi pesanan berhasil dijalankan!");
       
       // Refresh events & dashboard
       setTimeout(() => {
@@ -96,7 +97,7 @@ export default function Dashboard() {
       }, 1200);
 
     } catch (err: any) {
-      alert("Gagal menjalankan simulasi: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menjalankan simulasi: " + (err.response?.data?.message || err.message));
     } finally {
       setIsSimulating(false);
     }

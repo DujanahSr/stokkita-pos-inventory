@@ -7,6 +7,7 @@ import {
   Phone, MessageSquare, Edit3, Trash2, Users, MapPin, Mail, CreditCard
 } from "lucide-react";
 import api from "../api/axios";
+import { toast } from "sonner";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -121,8 +122,9 @@ export default function Reorder() {
       const res = await api.post("/reorder/recalculate");
       setRecalcResult(res.data);
       load();
+      toast.success("Parameter pengadaan (EOQ/ROP) berhasil dihitung ulang!");
     } catch (err: any) {
-      alert("Gagal menghitung ulang parameter pengadaan: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menghitung ulang parameter pengadaan: " + (err.response?.data?.message || err.message));
     } finally {
       setRecalculating(false);
     }
@@ -144,8 +146,9 @@ export default function Reorder() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success("PDF Purchase Order berhasil diunduh!");
     } catch (err: any) {
-      alert("Gagal mengunduh PDF Purchase Order");
+      toast.error("Gagal mengunduh PDF Purchase Order");
     } finally {
       setDownloadingPdfId(null);
     }
@@ -195,6 +198,7 @@ _StokKita Supply Chain & Inventory Operations_`;
   const handleCreate = async () => {
     if (!form.variant_id || !form.warehouse_id || !form.qty) {
       setError("Produk, gudang, dan qty wajib diisi");
+      toast.warning("Produk, gudang, dan qty wajib diisi");
       return;
     }
     setSaving(true);
@@ -204,8 +208,11 @@ _StokKita Supply Chain & Inventory Operations_`;
       setOpen(false);
       setForm(emptyForm);
       load();
+      toast.success("Draft Purchase Order berhasil dibuat!");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Gagal membuat PO");
+      const msg = err.response?.data?.message || "Gagal membuat PO";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -216,8 +223,9 @@ _StokKita Supply Chain & Inventory Operations_`;
     try {
       await api.put(`/reorder/${id}/status`, { status });
       load();
+      toast.success(`Status Purchase Order diperbarui menjadi "${status}"`);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Gagal mengupdate status");
+      toast.error(err.response?.data?.message || "Gagal mengupdate status");
     }
   };
 
@@ -228,16 +236,17 @@ _StokKita Supply Chain & Inventory Operations_`;
     try {
       if (editingSupplier) {
         await api.put(`/supplier/${editingSupplier.id}`, supplierForm);
+        toast.success(`Data supplier "${supplierForm.name}" berhasil diperbarui!`);
       } else {
         await api.post("/supplier", supplierForm);
+        toast.success(`Supplier "${supplierForm.name}" berhasil ditambahkan!`);
       }
       setIsSupplierModalOpen(false);
       setEditingSupplier(null);
       setSupplierForm({ name: "", pic_name: "", phone: "", email: "", address: "", payment_terms: "NET 30" });
       load();
-      alert("Data supplier berhasil disimpan!");
     } catch (err: any) {
-      alert("Gagal menyimpan supplier: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal menyimpan supplier: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
     }
@@ -248,8 +257,9 @@ _StokKita Supply Chain & Inventory Operations_`;
       try {
         await api.delete(`/supplier/${id}`);
         load();
+        toast.success(`Supplier "${name}" berhasil dihapus`);
       } catch (err: any) {
-        alert("Gagal menghapus supplier: " + (err.response?.data?.message || err.message));
+        toast.error("Gagal menghapus supplier: " + (err.response?.data?.message || err.message));
       }
     }
   };
