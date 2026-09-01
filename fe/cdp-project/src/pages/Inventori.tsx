@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
 import api from "../api/axios";
-import { PackageSearch, MapPin, ArrowRightLeft, X } from "lucide-react";
+import { PackageSearch, MapPin, ArrowRightLeft, X, Printer, FileText, Truck, Building2 } from "lucide-react";
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
@@ -20,6 +20,7 @@ export default function Inventori() {
   });
   const [loadingTransfer, setLoadingTransfer] = useState(false);
   const [transferError, setTransferError] = useState("");
+  const [selectedDeliveryNote, setSelectedDeliveryNote] = useState<any>(null);
 
   // Modal Opname
   const [isOpnameModalOpen, setIsOpnameModalOpen] = useState(false);
@@ -262,41 +263,69 @@ export default function Inventori() {
             )}
 
             {activeTab === "mutasi" && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800 mb-4">Riwayat Mutasi Barang</h2>
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Riwayat Mutasi Antar Gudang</h2>
+                    <p className="text-xs text-slate-500">Log perpindahan stok antar cabang toko dan penerbitan Surat Jalan resmi</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!selectedW && warehouses.length > 0) setSelectedW(warehouses[0].id);
+                      setIsModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-sm transition"
+                  >
+                    <ArrowRightLeft size={16} />
+                    Transfer Stok Baru
+                  </button>
+                </div>
+
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
+                  <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="text-slate-500 border-b border-slate-100 text-sm">
-                        <th className="pb-3 font-semibold">Tanggal</th>
-                        <th className="pb-3 font-semibold">Produk</th>
-                        <th className="pb-3 font-semibold">Dari Gudang</th>
-                        <th className="pb-3 font-semibold">Ke Gudang</th>
-                        <th className="pb-3 font-semibold text-center">Qty Mutasi</th>
-                        <th className="pb-3 font-semibold text-center">Status</th>
+                      <tr className="text-slate-400 bg-slate-50 border-b border-slate-100 uppercase tracking-wider font-semibold">
+                        <th className="p-3.5 pl-6">Tanggal</th>
+                        <th className="p-3.5">Produk & Varian</th>
+                        <th className="p-3.5">Dari Gudang Asal</th>
+                        <th className="p-3.5">Ke Gudang Tujuan</th>
+                        <th className="p-3.5 text-center">Qty Mutasi</th>
+                        <th className="p-3.5 text-center">Status</th>
+                        <th className="p-3.5 text-center pr-6">Dokumen</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody className="divide-y divide-slate-50 font-medium">
                       {transfers.length === 0 ? (
                          <tr>
-                           <td colSpan={6} className="py-8 text-center text-slate-400">Belum ada riwayat mutasi.</td>
+                           <td colSpan={7} className="py-8 text-center text-slate-400">Belum ada riwayat mutasi barang.</td>
                          </tr>
                       ) : transfers.map((t) => (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 text-sm text-slate-600">
+                          <td className="p-3.5 pl-6 text-slate-600 font-mono">
                             {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                           </td>
-                          <td className="py-4">
-                            <div className="font-semibold text-slate-800">{t.product_name}</div>
-                            <div className="text-sm text-slate-500">{t.color} &bull; {t.size}</div>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-800">{t.product_name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{t.color} • {t.size}</div>
                           </td>
-                          <td className="py-4 font-medium text-slate-700">{t.from_warehouse}</td>
-                          <td className="py-4 font-medium text-slate-700">{t.to_warehouse}</td>
-                          <td className="py-4 text-center font-bold text-slate-800 text-lg">{t.qty}</td>
-                          <td className="py-4 text-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
-                              {t.status}
+                          <td className="p-3.5 font-semibold text-slate-700">{t.from_warehouse}</td>
+                          <td className="p-3.5 font-semibold text-slate-700">{t.to_warehouse}</td>
+                          <td className="p-3.5 text-center font-bold text-slate-800">
+                            <span className="px-2.5 py-0.5 bg-slate-100 rounded-lg">{t.qty} pcs</span>
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {t.status || "Selesai"}
                             </span>
+                          </td>
+                          <td className="p-3.5 text-center pr-6">
+                            <button
+                              onClick={() => setSelectedDeliveryNote(t)}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mx-auto"
+                              title="Cetak Surat Jalan Pengiriman Antar Gudang"
+                            >
+                              <FileText size={13} /> Surat Jalan
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -589,6 +618,104 @@ export default function Inventori() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SURAT JALAN / DELIVERY NOTE */}
+      {selectedDeliveryNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <Truck className="text-emerald-600" size={20} />
+                Dokumen Surat Jalan Resmi
+              </h3>
+              <button onClick={() => setSelectedDeliveryNote(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div id="print-surat-jalan" className="p-5 border border-slate-300 rounded-xl space-y-4 bg-white text-xs font-sans">
+                <div className="flex justify-between items-start border-b pb-3">
+                  <div>
+                    <h2 className="text-base font-extrabold text-slate-900">SURAT JALAN PENGIRIMAN</h2>
+                    <p className="text-[10px] text-slate-500 font-mono">No. SJ: SJ-{selectedDeliveryNote.id.slice(0, 8).toUpperCase()}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                      TRANSFER ANTAR CABANG
+                    </span>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {new Date(selectedDeliveryNote.created_at).toLocaleDateString('id-ID', { dateStyle: 'full' })}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 font-semibold block">GUDANG PENGIRIM (ASAL):</span>
+                    <strong className="text-slate-800">{selectedDeliveryNote.from_warehouse}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-semibold block">GUDANG PENERIMA (TUJUAN):</span>
+                    <strong className="text-slate-800">{selectedDeliveryNote.to_warehouse}</strong>
+                  </div>
+                </div>
+
+                <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden text-xs">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="p-2 font-bold">No</th>
+                      <th className="p-2 font-bold">Nama Barang & Spesifikasi</th>
+                      <th className="p-2 font-bold text-center">Jumlah Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-slate-200">
+                      <td className="p-2">1</td>
+                      <td className="p-2">
+                        <div className="font-bold text-slate-900">{selectedDeliveryNote.product_name}</div>
+                        <div className="text-[10px] text-slate-500">{selectedDeliveryNote.color} • {selectedDeliveryNote.size}</div>
+                      </td>
+                      <td className="p-2 text-center font-bold text-slate-900 text-sm">{selectedDeliveryNote.qty} pcs</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Signatures */}
+                <div className="grid grid-cols-3 gap-2 pt-6 text-center text-[10px]">
+                  <div>
+                    <p className="text-slate-500 mb-8">Petugas Pengirim,</p>
+                    <p className="font-bold border-t border-slate-400 pt-1">( Kepala Gudang Asal )</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-8">Driver / Ekspedisi,</p>
+                    <p className="font-bold border-t border-slate-400 pt-1">( Pengemudi )</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-8">Petugas Penerima,</p>
+                    <p className="font-bold border-t border-slate-400 pt-1">( Kasir / Staff Tujuan )</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDeliveryNote(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Printer size={15} /> Cetak Surat Jalan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

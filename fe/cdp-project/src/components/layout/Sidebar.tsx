@@ -14,14 +14,16 @@ import {
   X,
   Tag,
   ShieldCheck,
+  Crown,
 } from "lucide-react";
 
 const allNavItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
   { to: "/produk", icon: Tag, label: "Katalog Produk", adminOnly: true },
-  { to: "/inventori", icon: Package, label: "Inventori", adminOnly: true },
+  { to: "/inventori", icon: Package, label: "Inventori & Mutasi", adminOnly: true },
   { to: "/transaksi", icon: ArrowLeftRight, label: "Transaksi", adminOnly: false },
   { to: "/reorder", icon: ShoppingCart, label: "Purchase Order", adminOnly: true },
+  { to: "/members", icon: Crown, label: "Pelanggan & Member", adminOnly: true },
   { to: "/laporan", icon: BarChart3, label: "Laporan", adminOnly: true },
 ];
 

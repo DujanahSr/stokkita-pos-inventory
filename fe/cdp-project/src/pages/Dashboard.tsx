@@ -10,13 +10,15 @@ import api from "../api/axios";
 import supabase from "../lib/supabaseClient";
 import { 
   TrendingUp, Package, ShoppingBag, AlertTriangle, 
-  Zap, Server, Layers, Clock, ArrowRight, Play, CheckCircle2 
+  Zap, Server, Layers, Clock, ArrowRight, Play, CheckCircle2,
+  DollarSign, Percent, Archive, Sparkles, Flame
 } from "lucide-react";
 
 const fmt = (v: any) => "Rp " + new Intl.NumberFormat("id-ID").format(v);
 
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
   const [periode, setPeriode] = useState(7);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,8 +34,14 @@ export default function Dashboard() {
     if (showLoading) setLoading(true);
     setError("");
 
-    api.get(`/laporan?periode=${periode}`)
-      .then((res) => setData(res.data))
+    Promise.all([
+      api.get(`/laporan?periode=${periode}`),
+      api.get(`/laporan/analytics`)
+    ])
+      .then(([resDashboard, resAnalytics]) => {
+        setData(resDashboard.data);
+        setAnalytics(resAnalytics.data);
+      })
       .catch((err) => setError(err.response?.data?.message || "Gagal memuat dashboard"))
       .finally(() => setLoading(false));
   };
@@ -299,6 +307,93 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* EXECUTIVE FINANCIAL & INVENTORY ANALYTICS */}
+              {analytics && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* Financial Gross Profit Margin */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Analitik Finansial 30 Hari</span>
+                        <h4 className="text-base font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                          <DollarSign size={18} className="text-emerald-600" /> Margin Laba Kotor
+                        </h4>
+                      </div>
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-extrabold">
+                        {analytics.financial.profit_margin_pct}% Margin
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                        <span className="text-slate-500">Omset Penjualan:</span>
+                        <span className="font-bold text-slate-800">{fmt(analytics.financial.total_revenue)}</span>
+                      </div>
+                      <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                        <span className="text-slate-500">Total HPP Modal (COGS):</span>
+                        <span className="font-bold text-red-600">-{fmt(analytics.financial.total_cogs)}</span>
+                      </div>
+                      <div className="flex justify-between p-2.5 bg-emerald-50 text-emerald-900 rounded-xl font-bold border border-emerald-200">
+                        <span>Laba Bersih Kotor:</span>
+                        <span className="text-emerald-700 font-extrabold">{fmt(analytics.financial.gross_profit)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slow-Moving / Dead Stock Actionable Clearances */}
+                  <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-amber-600">Peringatan Dead Stock</span>
+                        <h4 className="text-base font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
+                          <Archive size={18} className="text-amber-500" /> Produk Lambat Laku (Slow-Moving)
+                        </h4>
+                        <p className="text-xs text-slate-500">Stok mengendap lebih dari 30 hari tanpa transaksi penjualan (Saran: Diskon Promo / Obral Cuci Gudang)</p>
+                      </div>
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold">
+                        {analytics.slow_moving?.length || 0} Varian Mengendap
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="text-slate-400 bg-slate-50 border-b border-slate-100 uppercase font-semibold">
+                            <th className="p-2.5 pl-3">Produk & Varian</th>
+                            <th className="p-2.5 text-center">Stok Fisik</th>
+                            <th className="p-2.5 text-right">Modal Mengendap</th>
+                            <th className="p-2.5 text-center">Gudang</th>
+                            <th className="p-2.5 text-center pr-3">Saran Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 font-medium">
+                          {(!analytics.slow_moving || analytics.slow_moving.length === 0) ? (
+                            <tr><td colSpan={5} className="py-6 text-center text-slate-400">Tidak ada dead stock, perputaran inventori sehat!</td></tr>
+                          ) : (
+                            analytics.slow_moving.map((s: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="p-2.5 pl-3">
+                                  <div className="font-bold text-slate-800">{s.product_name}</div>
+                                  <div className="text-[10px] text-slate-400 font-mono">{s.sku} • {s.size}/{s.color}</div>
+                                </td>
+                                <td className="p-2.5 text-center font-bold text-slate-800">{s.current_stock} pcs</td>
+                                <td className="p-2.5 text-right font-bold text-amber-700">{fmt(Number(s.idle_capital))}</td>
+                                <td className="p-2.5 text-center text-slate-600">{s.warehouse_name}</td>
+                                <td className="p-2.5 text-center pr-3">
+                                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded-lg text-[10px]">
+                                    🔥 Diskon Obral
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Stok Kritis Buffer */}
               {data.stokKritis.length > 0 && (

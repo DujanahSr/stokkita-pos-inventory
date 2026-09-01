@@ -8,7 +8,8 @@ import {
   Receipt, Plus, Trash2, Store, Printer, Barcode, 
   Wallet, QrCode, CreditCard, Layers, Clock, CheckCircle2, 
   AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock,
-  Pause, Play, ShoppingCart, Bookmark
+  Pause, Play, ShoppingCart, Bookmark,
+  Crown, Gift, Sparkles, UserCheck, Search, X, Phone
 } from "lucide-react";
 
 interface HeldCart {
@@ -47,6 +48,12 @@ export default function Transaksi() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [tipe, setTipe] = useState("Penjualan");
   const [cart, setCart] = useState<{ variant_id: string; qty: number; price: number; name: string }[]>([]);
+
+  // Member & Loyalty Points State
+  const [memberPhoneInput, setMemberPhoneInput] = useState("");
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [isRedeemingPoints, setIsRedeemingPoints] = useState(false);
+  const [loadingMemberLookup, setLoadingMemberLookup] = useState(false);
 
   // Multi-Cart / Hold Transaction State
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>(() => {
@@ -239,7 +246,33 @@ export default function Transaksi() {
     setCart(cart.map(c => c.variant_id === vid ? { ...c, qty: Math.max(1, qty) } : c));
   };
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.qty * c.price, 0);
+  // Member & Cart Total Calculations
+  const rawCartTotal = cart.reduce((sum, c) => sum + c.qty * c.price, 0);
+  const maxRedeemablePoints = selectedMember ? Math.min(Number(selectedMember.points) || 0, Math.floor(rawCartTotal / 100)) : 0;
+  const pointsDiscount = (isRedeemingPoints && selectedMember) ? (maxRedeemablePoints * 100) : 0;
+  const cartTotal = Math.max(0, rawCartTotal - pointsDiscount);
+  const potentialPointsEarned = tipe === "Penjualan" ? Math.floor(cartTotal / 10000) : 0;
+
+  const handleLookupMember = async () => {
+    if (!memberPhoneInput.trim()) return;
+    setLoadingMemberLookup(true);
+    try {
+      const res = await api.get(`/members/lookup?phone=${encodeURIComponent(memberPhoneInput.trim())}`);
+      setSelectedMember(res.data);
+      setIsRedeemingPoints(false);
+    } catch (err: any) {
+      alert("Member dengan nomor telepon ini tidak ditemukan. Silakan daftarkan di menu Pelanggan & Member.");
+      setSelectedMember(null);
+    } finally {
+      setLoadingMemberLookup(false);
+    }
+  };
+
+  const handleRemoveMember = () => {
+    setSelectedMember(null);
+    setMemberPhoneInput("");
+    setIsRedeemingPoints(false);
+  };
 
   // Multi-Cart & Hold Transaksi Handlers
   const handleOpenHoldModal = () => {
@@ -347,7 +380,11 @@ export default function Transaksi() {
         type: tipe,
         items: cart.map(c => ({ variant_id: c.variant_id, qty: c.qty, price: c.price })),
         payment_method: paymentMethod,
-        payment_details: paymentDetailsPayload
+        payment_details: paymentDetailsPayload,
+        member_id: selectedMember?.id || null,
+        member_name: selectedMember?.name || null,
+        discount_points: pointsDiscount,
+        redeemed_points: isRedeemingPoints ? maxRedeemablePoints : 0
       });
 
       setIsModalOpen(false);
@@ -359,16 +396,29 @@ export default function Transaksi() {
         kasir: activeShift?.cashier_name || "Kasir Toko",
         warehouse: warehouses.find(w => w.id === selectedW)?.name || "",
         items: [...cart],
+        raw_total: rawCartTotal,
         total: cartTotal,
         type: tipe,
         payment_method: paymentMethod,
-        payment_details: paymentDetailsPayload
+        payment_details: paymentDetailsPayload,
+        member: selectedMember ? {
+          name: selectedMember.name,
+          phone: selectedMember.phone,
+          tier: selectedMember.tier,
+          discount_points: pointsDiscount,
+          redeemed_points: isRedeemingPoints ? maxRedeemablePoints : 0,
+          earned_points: potentialPointsEarned,
+          points_balance: Math.max(0, (Number(selectedMember.points) || 0) - (isRedeemingPoints ? maxRedeemablePoints : 0) + potentialPointsEarned)
+        } : null
       });
 
       fetchTransaksi();
       fetchInventory(selectedW);
       fetchActiveShift(selectedW);
       setCart([]);
+      setSelectedMember(null);
+      setMemberPhoneInput("");
+      setIsRedeemingPoints(false);
       setCashReceived("");
       setCardLast4("");
       setApprovalCode("");
@@ -828,6 +878,86 @@ export default function Transaksi() {
             </div>
           </div>
 
+          {/* MEMBER LOYALTY SEARCH & BADGE */}
+          <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3 space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                <Crown size={14} className="text-amber-500" />
+                Member & Loyalty Points
+              </label>
+              {selectedMember && (
+                <button
+                  type="button"
+                  onClick={handleRemoveMember}
+                  className="text-[11px] text-red-500 hover:text-red-700 font-semibold flex items-center gap-1"
+                >
+                  <X size={12} /> Hapus Member
+                </button>
+              )}
+            </div>
+
+            {!selectedMember ? (
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={memberPhoneInput}
+                    onChange={e => setMemberPhoneInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleLookupMember(); } }}
+                    placeholder="Ketik nomor WhatsApp member (Misal: 081298765432)..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                  <Phone size={13} className="absolute left-2.5 top-2.5 text-purple-400" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLookupMember}
+                  disabled={loadingMemberLookup || !memberPhoneInput.trim()}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Search size={13} /> {loadingMemberLookup ? "..." : "Cek Member"}
+                </button>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-white border border-purple-200 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 text-xs">{selectedMember.name}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                      ⭐ {selectedMember.tier || "Silver"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                    <span>Saldo: <strong>{new Intl.NumberFormat('id-ID').format(selectedMember.points || 0)} Poin</strong></span>
+                    <span>• Nilai: {fmt((selectedMember.points || 0) * 100)}</span>
+                  </div>
+                </div>
+
+                {/* Checkbox Redeem Points */}
+                {selectedMember.points > 0 && (
+                  <label className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 p-2 rounded-lg cursor-pointer border border-purple-200 text-xs transition">
+                    <input
+                      type="checkbox"
+                      checked={isRedeemingPoints}
+                      onChange={e => setIsRedeemingPoints(e.target.checked)}
+                      className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-bold text-purple-900">Tukarkan Poin</div>
+                      <div className="text-[10px] text-purple-700 font-semibold">Potong {fmt(maxRedeemablePoints * 100)}</div>
+                    </div>
+                  </label>
+                )}
+              </div>
+            )}
+
+            {selectedMember && (
+              <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                <Sparkles size={13} /> Member akan mendapatkan <strong>+{potentialPointsEarned} Poin</strong> dari transaksi ini.
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Scan Barcode / SKU</label>
             <div className="flex items-center gap-2 mb-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 focus-within:ring-2 focus-within:ring-emerald-500">
@@ -928,9 +1058,17 @@ export default function Transaksi() {
                 ))}
               </tbody>
             </table>
-            <div className="bg-slate-50 p-3 border-t border-slate-200 flex justify-between items-center">
-              <span className="font-semibold text-slate-600 text-sm">Total Belanja:</span>
-              <span className="text-xl font-bold text-emerald-700">{fmt(cartTotal)}</span>
+            <div className="bg-slate-50 p-3 border-t border-slate-200 space-y-1">
+              {pointsDiscount > 0 && (
+                <div className="flex justify-between items-center text-xs text-purple-700 font-semibold">
+                  <span className="flex items-center gap-1"><Gift size={13} /> Diskon Poin Member ({maxRedeemablePoints} Poin):</span>
+                  <span>-{fmt(pointsDiscount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
+                <span className="font-semibold text-slate-600 text-sm">Total Pembayaran:</span>
+                <span className="text-xl font-bold text-emerald-700">{fmt(cartTotal)}</span>
+              </div>
             </div>
           </div>
           </div>
@@ -1359,8 +1497,31 @@ export default function Transaksi() {
               <div className="border-t border-dashed my-2"></div>
 
               <div className="space-y-1 text-xs">
+                {receiptData.member && (
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-0.5 mb-1 font-sans">
+                    <div className="flex justify-between font-bold text-slate-800">
+                      <span>👑 Member: {receiptData.member.name}</span>
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-semibold">{receiptData.member.tier}</span>
+                    </div>
+                    {receiptData.member.discount_points > 0 && (
+                      <div className="flex justify-between text-purple-700 font-semibold">
+                        <span>Diskon Poin ({receiptData.member.points_redeemed} Poin):</span>
+                        <span>-{fmt(receiptData.member.discount_points)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Poin Didapat:</span>
+                      <span>+{receiptData.member.earned_points} Poin</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500 text-[10px] pt-0.5 border-t">
+                      <span>Sisa Saldo Poin:</span>
+                      <span>{new Intl.NumberFormat('id-ID').format(receiptData.member.points_balance)} Poin</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between font-bold text-sm text-slate-900">
-                  <span>TOTAL</span>
+                  <span>TOTAL PEMBAYARAN</span>
                   <span>{fmt(receiptData.total)}</span>
                 </div>
 

@@ -271,4 +271,90 @@ router.get("/export/excel", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/laporan/analytics - Executive Financial & Inventory Analytics
+router.get("/analytics", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+
+    // 1. Gross Profit & Financial Summary (Last 30 days)
+    const finRes = await pool.query(`
+      SELECT 
+        COALESCE(SUM(ti.subtotal), 0) as total_revenue,
+        COALESCE(SUM(ti.qty * v.price_buy), 0) as total_cogs,
+        COUNT(DISTINCT t.id) as total_transactions,
+        COALESCE(SUM(ti.qty), 0) as total_units_sold
+      FROM transactions t
+      JOIN transaction_items ti ON t.id = ti.transaction_id
+      JOIN variants v ON ti.variant_id = v.id
+      WHERE t.tenant_id = $1 AND t.created_at >= NOW() - INTERVAL '30 days' AND t.type != 'Retur'
+    `, [tenant_id]);
+
+    const revenue = Number(finRes.rows[0]?.total_revenue || 0);
+    const cogs = Number(finRes.rows[0]?.total_cogs || 0);
+    const grossProfit = revenue - cogs;
+    const profitMargin = revenue > 0 ? ((grossProfit / revenue) * 100).toFixed(1) : "0";
+
+    // 2. Top 5 Best Selling Products (Volume & Omset)
+    const topRes = await pool.query(`
+      SELECT 
+        p.name as product_name,
+        v.sku,
+        v.size,
+        v.color,
+        SUM(ti.qty) as total_qty_sold,
+        SUM(ti.subtotal) as total_revenue_generated
+      FROM transaction_items ti
+      JOIN transactions t ON ti.transaction_id = t.id
+      JOIN variants v ON ti.variant_id = v.id
+      JOIN products p ON v.product_id = p.id
+      WHERE t.tenant_id = $1 AND t.created_at >= NOW() - INTERVAL '30 days' AND t.type != 'Retur'
+      GROUP BY p.name, v.sku, v.size, v.color
+      ORDER BY total_qty_sold DESC
+      LIMIT 5
+    `, [tenant_id]);
+
+    // 3. Slow-Moving / Dead Stock Items (Stock > 0 with 0 sales in last 30 days)
+    const slowRes = await pool.query(`
+      SELECT 
+        p.name as product_name,
+        v.sku,
+        v.size,
+        v.color,
+        i.qty as current_stock,
+        v.price_buy,
+        (i.qty * v.price_buy) as idle_capital,
+        w.name as warehouse_name
+      FROM inventory i
+      JOIN variants v ON i.variant_id = v.id
+      JOIN products p ON v.product_id = p.id
+      JOIN warehouses w ON i.warehouse_id = w.id
+      WHERE p.tenant_id = $1 AND i.qty > 0
+        AND v.id NOT IN (
+          SELECT DISTINCT ti.variant_id 
+          FROM transaction_items ti
+          JOIN transactions t ON ti.transaction_id = t.id
+          WHERE t.tenant_id = $1 AND t.created_at >= NOW() - INTERVAL '30 days'
+        )
+      ORDER BY idle_capital DESC
+      LIMIT 5
+    `, [tenant_id]);
+
+    res.json({
+      financial: {
+        total_revenue: revenue,
+        total_cogs: cogs,
+        gross_profit: grossProfit,
+        profit_margin_pct: Number(profitMargin),
+        total_transactions: Number(finRes.rows[0]?.total_transactions || 0),
+        total_units_sold: Number(finRes.rows[0]?.total_units_sold || 0)
+      },
+      top_selling: topRes.rows,
+      slow_moving: slowRes.rows
+    });
+  } catch (err: any) {
+    console.error("GET /api/laporan/analytics error:", err);
+    res.status(500).json({ message: "Gagal mengambil data analitik eksekutif" });
+  }
+});
+
 export default router;

@@ -72,10 +72,25 @@ router.post("/", async (req: Request, res: Response) => {
     }
     
     // Insert Transaction with Payment Method & Details
+    const member_id = req.body.member_id;
+    const discount_points = Number(req.body.discount_points) || 0;
+    const redeemed_points = Number(req.body.redeemed_points) || 0;
+    const final_amount = Math.max(0, total_amount - discount_points);
+    const earned_points = type === "Penjualan" ? Math.floor(final_amount / 10000) : 0;
+
+    const enrichedPaymentDetails = {
+      ...payment_details,
+      member_id: member_id || null,
+      member_name: req.body.member_name || null,
+      discount_points,
+      redeemed_points,
+      earned_points
+    };
+
     const tRes = await client.query(`
       INSERT INTO transactions (tenant_id, warehouse_id, user_id, type, total_amount, payment_method, payment_details)
       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at
-    `, [tenant_id, warehouse_id, user_id, type, total_amount, payment_method, JSON.stringify(payment_details)]);
+    `, [tenant_id, warehouse_id, user_id, type, final_amount, payment_method, JSON.stringify(enrichedPaymentDetails)]);
     
     const trxId = tRes.rows[0].id;
     const createdAt = tRes.rows[0].created_at;
@@ -88,19 +103,30 @@ router.post("/", async (req: Request, res: Response) => {
       `, [trxId, item.variant_id, item.qty, item.price, item.qty * item.price]);
     }
 
+    // Update Member Points and Total Spent if member exists
+    if (member_id && type === "Penjualan") {
+      await client.query(`
+        UPDATE members 
+        SET 
+          points = GREATEST(0, points - $1 + $2),
+          total_spent = total_spent + $3
+        WHERE id = $4 AND tenant_id = $5
+      `, [redeemed_points, earned_points, final_amount, member_id, tenant_id]);
+    }
+
     // Update Cashier Shift if active
     if (type === "Penjualan") {
       let cashPart = 0;
       let nonCashPart = 0;
 
       if (payment_method === "Tunai") {
-        cashPart = total_amount;
+        cashPart = final_amount;
       } else if (payment_method === "Split" && payment_details?.split) {
         const cashSplit = payment_details.split.find((s: any) => s.method === "Tunai");
         cashPart = cashSplit ? Number(cashSplit.amount) : 0;
-        nonCashPart = total_amount - cashPart;
+        nonCashPart = final_amount - cashPart;
       } else {
-        nonCashPart = total_amount;
+        nonCashPart = final_amount;
       }
 
       await client.query(`
@@ -110,7 +136,7 @@ router.post("/", async (req: Request, res: Response) => {
           total_cash_sales = total_cash_sales + $2,
           total_non_cash_sales = total_non_cash_sales + $3
         WHERE tenant_id = $4 AND warehouse_id = $5 AND user_id = $6 AND status = 'OPEN'
-      `, [total_amount, cashPart, nonCashPart, tenant_id, warehouse_id, user_id]);
+      `, [final_amount, cashPart, nonCashPart, tenant_id, warehouse_id, user_id]);
     }
     
     await client.query("COMMIT"); // COMMIT TRANSACTION
