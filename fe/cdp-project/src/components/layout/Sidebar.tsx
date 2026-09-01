@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import api from "../../api/axios";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Package,
@@ -35,6 +37,39 @@ const adminItems = [
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogoutClick = async () => {
+    setLoggingOut(true);
+    try {
+      // Cek apakah ada shift kasir yang masih aktif/belum ditutup
+      const res = await api.get("/shift/active");
+      const activeShift = res.data?.active_shift;
+
+      if (activeShift) {
+        const confirmLogout = confirm(
+          `⚠️ PERINGATAN SHIFT KASIR AKTIF!\n\n` +
+          `Shift kasir Anda di cabang "${activeShift.warehouse_name}" masih AKTIF (belum ditutup/Z-Report).\n\n` +
+          `Disarankan untuk menutup shift kasir terlebih dahulu agar rekonsiliasi laci kas tercatat rapi.\n\n` +
+          `Apakah Anda yakin tetap ingin keluar sekarang?`
+        );
+
+        if (!confirmLogout) {
+          navigate("/transaksi");
+          toast.info(`Silakan tutup shift kasir di cabang "${activeShift.warehouse_name}"`);
+          setLoggingOut(false);
+          return;
+        }
+      }
+
+      logout();
+    } catch (e) {
+      logout();
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   return (
     <>
@@ -131,11 +166,12 @@ export default function Sidebar() {
             </div>
           </div>
           <button
-            onClick={logout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
+            onClick={handleLogoutClick}
+            disabled={loggingOut}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
           >
             <LogOut className="w-4 h-4" />
-            Keluar
+            {loggingOut ? "Memeriksa..." : "Keluar"}
           </button>
         </div>
       </aside>

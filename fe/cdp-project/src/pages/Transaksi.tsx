@@ -10,7 +10,7 @@ import {
   AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock,
   Pause, Play, ShoppingCart, Bookmark,
   Crown, Gift, Sparkles, UserCheck, Search, X, Phone,
-  Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw
+  Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw, Package
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -117,6 +117,12 @@ export default function Transaksi() {
   const [qrisSimulatorSuccess, setQrisSimulatorSuccess] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
 
+  // Dedicated POS Interface State
+  const [activeMainTab, setActiveMainTab] = useState<"pos" | "retur" | "shift">("pos");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState("Semua");
+  const [historySearch, setHistorySearch] = useState("");
+
   useEffect(() => {
     fetchWarehouses();
   }, []);
@@ -133,7 +139,19 @@ export default function Transaksi() {
     try {
       const res = await api.get("/master/warehouses");
       setWarehouses(res.data);
-      if (res.data.length > 0) setSelectedW(res.data[0].id);
+      if (res.data.length > 0) {
+        // Cek apakah kasir sedang memiliki shift aktif di cabang manapun
+        try {
+          const shiftRes = await api.get("/shift/active");
+          if (shiftRes.data?.active_shift?.warehouse_id) {
+            setSelectedW(shiftRes.data.active_shift.warehouse_id);
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+        setSelectedW(res.data[0].id);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -225,6 +243,13 @@ export default function Transaksi() {
 
   // Cart & POS Handlers
   const handleAddToCart = (vid: string, e?: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!activeShift) {
+      toast.warning("Shift kasir belum dibuka! Buka shift kasir terlebih dahulu untuk mulai transaksi.");
+      setIsOpenShiftModal(true);
+      if (e) e.target.value = "";
+      return;
+    }
+
     if (!vid) return;
     const inv = inventory.find(i => i.variant_id === vid);
     if (!inv) {
@@ -259,6 +284,14 @@ export default function Transaksi() {
       e.preventDefault();
       const scanned = barcodeInput.trim();
       if (!scanned) return;
+
+      if (!activeShift) {
+        toast.warning("Shift kasir belum dibuka! Buka shift kasir terlebih dahulu untuk memproses scan barcode.");
+        setIsOpenShiftModal(true);
+        setBarcodeInput("");
+        return;
+      }
+
       const inv = inventory.find(i => i.sku.toLowerCase() === scanned.toLowerCase());
       if (inv) {
         handleAddToCart(inv.variant_id);
@@ -671,247 +704,917 @@ export default function Transaksi() {
     setIsModalOpen(true);
   };
 
+  // Unique categories for filtering
+  const catalogCategories = ["Semua", ...Array.from(new Set(inventory.map(i => i.category || "Sepatu").filter(Boolean)))];
+  
+  // Filtered Catalog
+  const filteredCatalog = inventory.filter(item => {
+    const q = catalogSearch.toLowerCase().trim();
+    const matchSearch = !q || 
+      (item.product_name || "").toLowerCase().includes(q) || 
+      (item.sku || "").toLowerCase().includes(q) ||
+      (item.category || "").toLowerCase().includes(q) ||
+      (item.color || "").toLowerCase().includes(q) ||
+      (item.size || "").toString().toLowerCase().includes(q);
+    const matchCategory = catalogCategory === "Semua" || (item.category || "Sepatu").toLowerCase() === catalogCategory.toLowerCase();
+    return matchSearch && matchCategory;
+  });
+
+  // Filtered History
+  const filteredHistory = transaksiList.filter(t => {
+    const q = historySearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (t.id || "").toLowerCase().includes(q) ||
+      (t.kasir_name || "").toLowerCase().includes(q) ||
+      (t.payment_method || "").toLowerCase().includes(q) ||
+      (t.warehouse_name || "").toLowerCase().includes(q) ||
+      (t.type || "").toLowerCase().includes(q)
+    );
+  });
+
+  // Quick Cash Amounts
+  const quickCashAmounts = [
+    { label: "Uang Pas", val: cartTotal },
+    { label: "Rp 50.000", val: 50000 },
+    { label: "Rp 100.000", val: 100000 },
+    { label: "Rp 200.000", val: 200000 },
+    { label: "Rp 500.000", val: 500000 },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-slate-100 font-sans">
       <Sidebar />
-      <div className="flex-1 lg:ml-60 ml-0 min-w-0 flex flex-col">
-        <Navbar title="Kasir SaaS & POS" />
-        <main className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-7xl mx-auto space-y-6">
+      <div className="flex-1 lg:ml-60 ml-0 min-w-0 flex flex-col h-screen overflow-hidden">
+        <Navbar title="Mesin Kasir (POS Terminal Enterprise)" />
+        
+        {/* TOP POS NAVIGATION BAR */}
+        <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 flex-shrink-0 shadow-xs">
+          {/* Main Tab Switchers */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMainTab("pos");
+                setTipe("Penjualan");
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                activeMainTab === "pos"
+                  ? "bg-white text-emerald-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <ShoppingCart size={15} />
+              <span>Kasir POS Touch</span>
+            </button>
 
-            {/* Header & Warehouse Selector */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h1 className="text-3xl font-bold flex items-center gap-2 text-slate-800">
-                  <Receipt className="text-emerald-600" size={32} />
-                  Mesin Kasir (POS Enterprise)
-                </h1>
-                <p className="text-slate-500 mt-1">Multi-Payment, QRIS Sandbox, Split Payment & Cash Drawer Reconciliation</p>
-              </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMainTab("retur");
+                setTipe("Retur");
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                activeMainTab === "retur"
+                  ? "bg-white text-red-600 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <RefreshCw size={15} />
+              <span>Retur Struk & Refund</span>
+            </button>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Tombol Cek Stok Lintas Cabang */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetchCrossBranchStock();
-                    setIsCrossStockModalOpen(true);
-                  }}
-                  className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
-                  title="Cek ketersediaan stok barang di cabang toko lain"
-                >
-                  <Eye size={16} className="text-blue-600" />
-                  <span>Cek Stok Cabang</span>
-                </button>
+            <button
+              type="button"
+              onClick={() => setActiveMainTab("shift")}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                activeMainTab === "shift"
+                  ? "bg-white text-blue-600 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Clock size={15} />
+              <span>Shift & Riwayat Kasir</span>
+            </button>
+          </div>
 
-                <div 
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl shadow-sm border transition-all ${
-                    activeShift 
-                      ? 'bg-amber-50/70 border-amber-300' 
-                      : 'bg-white border-slate-200'
-                  }`}
-                  title={activeShift ? "Cabang toko terkunci selama shift kasir aktif. Tutup shift terlebih dahulu untuk berpindah cabang." : "Pilih cabang toko"}
-                >
-                  {activeShift ? (
-                    <Lock size={18} className="text-amber-600" />
-                  ) : (
-                    <Store size={18} className="text-emerald-600" />
-                  )}
-                  <select 
-                    disabled={!!activeShift}
-                    className={`bg-transparent font-medium outline-none text-sm ${
-                      activeShift ? 'text-amber-900 cursor-not-allowed font-semibold' : 'text-slate-700 cursor-pointer'
-                    }`}
-                    value={selectedW} 
-                    onChange={e => setSelectedW(e.target.value)}
-                  >
-                    {warehouses.map(w => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                  {activeShift && (
-                    <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-1.5 py-0.5 rounded">Terkunci</span>
-                  )}
-                </div>
+          {/* Right Utilities */}
+          <div className="flex items-center gap-2">
+            {/* Cek Stok Cabang */}
+            <button
+              type="button"
+              onClick={() => {
+                fetchCrossBranchStock();
+                setIsCrossStockModalOpen(true);
+              }}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+            >
+              <Eye size={14} className="text-blue-600" />
+              <span className="hidden sm:inline">Cek Stok Cabang</span>
+            </button>
 
-                {/* Tombol Antrean Diparkir */}
-                <button
-                  type="button"
-                  onClick={() => setIsHeldListModalOpen(true)}
-                  className={`px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all shadow-sm border ${
-                    heldCarts.length > 0
-                      ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse'
-                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <Pause size={16} />
-                  <span>Antrean Diparkir</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    heldCarts.length > 0 ? 'bg-white text-amber-800' : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {heldCarts.length}
-                  </span>
-                </button>
+            {/* Antrean Terparkir */}
+            <button
+              type="button"
+              onClick={() => setIsHeldListModalOpen(true)}
+              className={`px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-2xs border ${
+                heldCarts.length > 0
+                  ? "bg-amber-500 hover:bg-amber-600 text-white border-amber-600 animate-pulse"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              <Pause size={14} />
+              <span>Parkir ({heldCarts.length})</span>
+            </button>
 
-                <button 
-                  onClick={handleOpenTransactionModal}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all shadow-sm"
-                >
-                  <Plus size={18} /> Transaksi Baru
-                </button>
-              </div>
+            {/* Warehouse Lock / Selector */}
+            <div 
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold ${
+                activeShift ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              {activeShift ? <Lock size={13} className="text-amber-600" /> : <Store size={13} className="text-emerald-600" />}
+              <select 
+                disabled={!!activeShift}
+                className="bg-transparent outline-none cursor-pointer pr-1"
+                value={selectedW} 
+                onChange={e => setSelectedW(e.target.value)}
+              >
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
             </div>
+          </div>
+        </div>
 
-            {/* Shift Status Banner */}
-            <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm ${
-              activeShift 
-                ? 'bg-emerald-50/70 border-emerald-200' 
-                : 'bg-amber-50/80 border-amber-200'
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${activeShift ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>
-                  {activeShift ? <Clock size={22} /> : <AlertCircle size={22} />}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800">
-                      {activeShift ? "Status Shift: AKTIF" : "Status Shift: BELUM DIBUKA"}
-                    </span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                      activeShift ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-900'
-                    }`}>
-                      {activeShift ? "Open" : "Closed"}
-                    </span>
+        {/* MAIN BODY AREA */}
+        <main className="flex-1 overflow-hidden p-3 sm:p-4">
+          
+          {/* TAB 1: DEDICATED POS TOUCH SCREEN */}
+          {activeMainTab === "pos" && (
+            <div className="h-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
+              
+              {/* SISI KIRI: KATALOG PRODUK & SEARCH (7 COLS = ~60% LAYAR) */}
+              <div className="lg:col-span-7 flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+                
+                {/* Search Bar & Barcode Scanner Bar */}
+                <div className="p-3 border-b border-slate-100 space-y-2.5 bg-slate-50/50">
+                  <div className="flex gap-2">
+                    {/* Live Catalog Search */}
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                      <input
+                        type="text"
+                        value={catalogSearch}
+                        onChange={e => setCatalogSearch(e.target.value)}
+                        placeholder="Cari produk sepatu, SKU, warna..."
+                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                      />
+                      {catalogSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setCatalogSearch("")}
+                          className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Barcode Scanner Direct Input */}
+                    <div className="relative w-48 sm:w-56">
+                      <Barcode className="absolute left-3 top-2.5 text-emerald-600" size={16} />
+                      <input
+                        ref={barcodeInputRef}
+                        type="text"
+                        value={barcodeInput}
+                        onChange={e => setBarcodeInput(e.target.value)}
+                        onKeyDown={handleScanBarcode}
+                        placeholder="Scan Barcode (Enter)..."
+                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-emerald-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      />
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    {activeShift 
-                      ? `Kasir: ${activeShift.cashier_name || 'Admin'} • Modal Awal: ${fmt(Number(activeShift.start_cash))} • Total Omset: ${fmt(Number(activeShift.total_sales))}`
-                      : "Harap buka shift dan masukkan modal uang laci kasir sebelum melayani transaksi."
-                    }
-                  </p>
+
+                  {/* Quick Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                    {catalogCategories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCatalogCategory(cat)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                          catalogCategory === cat
+                            ? "bg-emerald-600 text-white shadow-2xs"
+                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Visual Product Grid */}
+                <div className="flex-1 p-3 overflow-y-auto">
+                  {filteredCatalog.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                      <Package size={48} className="text-slate-300 mb-2" />
+                      <p className="text-sm font-semibold">Tidak ada produk ditemukan</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Coba ubah kata kunci pencarian atau kategori</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 gap-2.5">
+                      {filteredCatalog.map(inv => {
+                        const inCart = cart.find(c => c.variant_id === inv.variant_id);
+                        const isOutOfStock = inv.qty <= 0;
+                        const isLowStock = inv.qty > 0 && inv.qty <= 10;
+
+                        return (
+                          <div
+                            key={inv.variant_id}
+                            onClick={() => {
+                              if (!activeShift) {
+                                if (confirm("Shift kasir belum dibuka. Buka shift kasir terlebih dahulu?")) {
+                                  setIsOpenShiftModal(true);
+                                }
+                                return;
+                              }
+                              handleAddToCart(inv.variant_id);
+                            }}
+                            className={`group relative p-3 rounded-xl border text-left transition-all cursor-pointer select-none flex flex-col justify-between ${
+                              isOutOfStock
+                                ? "bg-slate-50/70 border-slate-200 opacity-60 cursor-not-allowed"
+                                : inCart
+                                ? "bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-500/20 shadow-xs"
+                                : "bg-white border-slate-200 hover:border-emerald-300 hover:shadow-sm"
+                            }`}
+                          >
+                            {/* In-Cart Quantity Indicator Badge */}
+                            {inCart && (
+                              <div className="absolute -top-1.5 -right-1.5 bg-emerald-600 text-white font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
+                                {inCart.qty}
+                              </div>
+                            )}
+
+                            <div>
+                              {/* Category & Stock Pill */}
+                              <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  {inv.category || "Sepatu"}
+                                </span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  isOutOfStock
+                                    ? "bg-red-100 text-red-700"
+                                    : isLowStock
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800"
+                                }`}>
+                                  {isOutOfStock ? "Habis" : `Stok: ${inv.qty}`}
+                                </span>
+                              </div>
+
+                              {/* Product Title */}
+                              <h3 className="font-bold text-xs text-slate-800 line-clamp-1 group-hover:text-emerald-700 transition-colors">
+                                {inv.product_name}
+                              </h3>
+
+                              {/* Variant Details */}
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-1">
+                                <span className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded">{inv.sku}</span>
+                                <span>•</span>
+                                <span>Sz {inv.size}</span>
+                                <span>•</span>
+                                <span>{inv.color}</span>
+                              </div>
+                            </div>
+
+                            {/* Price Tag */}
+                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                              <span className="text-xs font-black text-slate-900">
+                                {fmt(inv.price_sell)}
+                              </span>
+                              <div className={`p-1 rounded-lg ${isOutOfStock ? 'text-slate-300' : 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition'}`}>
+                                <Plus size={13} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Quick Status */}
+                <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500">
+                  <span>Katalog: <strong>{filteredCatalog.length} item</strong> varian siap jual</span>
+                  <span>Klik kartu produk untuk menambah keranjang</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {activeShift ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fetchPettyCashMovements(activeShift.id);
-                        setIsPettyCashModalOpen(true);
-                      }}
-                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                      title="Catat kas masuk atau kas keluar laci kasir (Petty Cash)"
-                    >
-                      <Coins size={15} /> Kas Masuk/Keluar
-                    </button>
+              {/* SISI KANAN: KERANJANG BELANJA & PANEL CHECKOUT (5 COLS = ~40% LAYAR) */}
+              <div className="lg:col-span-5 flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+                
+                {/* Header Keranjang & Shift Status */}
+                <div className="p-3 border-b border-slate-100 bg-slate-50/70 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${activeShift ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`} />
+                      <span className="font-bold text-xs text-slate-800">
+                        {activeShift ? `Kasir: ${activeShift.cashier_name || 'Admin'}` : 'Shift Kasir Belum Dibuka'}
+                      </span>
+                    </div>
 
-                    <button
-                      onClick={() => setIsCloseShiftModal(true)}
-                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                    >
-                      <ShieldCheck size={16} /> Tutup Shift (Z-Report)
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setIsOpenShiftModal(true)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <DollarSign size={16} /> Buka Shift Kasir
-                  </button>
-                )}
-              </div>
-            </div>
+                    <div className="flex items-center gap-1.5">
+                      {activeShift ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            fetchPettyCashMovements(activeShift.id);
+                            setIsPettyCashModalOpen(true);
+                          }}
+                          className="text-[10px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition"
+                          title="Catat kas masuk/keluar laci"
+                        >
+                          Kas Laci
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsOpenShiftModal(true)}
+                          className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded-lg transition"
+                        >
+                          + Buka Shift
+                        </button>
+                      )}
 
-            {/* Banner Antrean Tertahan jika ada */}
-            {heldCarts.length > 0 && (
-              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex justify-between items-center text-xs text-amber-900 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <Pause size={16} className="text-amber-600 flex-shrink-0" />
-                  <span>
-                    Terdapat <strong>{heldCarts.length} antrean transaksi</strong> yang sedang ditahan/diparkir.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsHeldListModalOpen(true)}
-                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 transition"
-                >
-                  <Play size={13} /> Buka Daftar Antrean
-                </button>
-              </div>
-            )}
-
-            {/* Table Riwayat Transaksi */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-slate-800">Riwayat Transaksi Kasir</h2>
-                <span className="text-xs text-slate-500">Menampilkan 50 transaksi terakhir</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="text-slate-500 border-b border-slate-100 text-sm">
-                      <th className="pb-3 font-semibold">Waktu</th>
-                      <th className="pb-3 font-semibold">Cabang / Gudang</th>
-                      <th className="pb-3 font-semibold">Tipe</th>
-                      <th className="pb-3 font-semibold">Metode Bayar</th>
-                      <th className="pb-3 font-semibold">Kasir</th>
-                      <th className="pb-3 text-right font-semibold">Total Belanja</th>
-                      <th className="pb-3 text-center font-semibold pr-2">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {transaksiList.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400">Belum ada riwayat transaksi.</td>
-                      </tr>
-                    ) : transaksiList.map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-4 text-sm text-slate-600 whitespace-nowrap">
-                          {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
-                        </td>
-                        <td className="py-4 font-medium text-slate-700">{t.warehouse_name}</td>
-                        <td className="py-4">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            t.type === 'Retur' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          }`}>
-                            {t.type}
-                          </span>
-                        </td>
-                        <td className="py-4">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            t.payment_method === 'QRIS' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                            t.payment_method === 'Debit' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                            t.payment_method === 'Split' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                            'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}>
-                            {t.payment_method || 'Tunai'}
-                          </span>
-                        </td>
-                        <td className="py-4 text-slate-600 text-sm">{t.kasir_name || "Kasir"}</td>
-                        <td className="py-4 text-right font-bold text-slate-800">{fmt(t.total_amount)}</td>
-                        <td className="py-4 text-center pr-2">
+                      {cart.length > 0 && (
+                        <>
                           <button
                             type="button"
-                            onClick={() => handleReprintReceipt(t)}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1 mx-auto transition"
-                            title="Cetak ulang struk thermal"
+                            onClick={handleOpenHoldModal}
+                            className="text-[10px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition"
+                            title="Parkir transaksi saat ini"
                           >
-                            <Printer size={13} />
-                            <span>Struk</span>
+                            Parkir
                           </button>
-                        </td>
-                      </tr>
+                          <button
+                            type="button"
+                            onClick={() => setCart([])}
+                            className="text-[10px] font-bold text-red-700 bg-red-100 hover:bg-red-200 px-2 py-1 rounded-lg transition"
+                            title="Kosongkan seluruh keranjang"
+                          >
+                            Reset
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Member Loyalty Input Dropdown */}
+                  <div className="flex gap-1.5">
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-2.5 top-2 text-slate-400" size={13} />
+                      <input
+                        type="text"
+                        value={memberPhoneInput}
+                        onChange={e => setMemberPhoneInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleLookupMember()}
+                        placeholder="No WhatsApp Member..."
+                        className="w-full pl-7 pr-3 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 outline-none"
+                      />
+                    </div>
+                    {selectedMember ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveMember}
+                        className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                        title="Lepas member"
+                      >
+                        <X size={12} />
+                        <span>{selectedMember.name}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleLookupMember}
+                        disabled={loadingMemberLookup}
+                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50"
+                      >
+                        {loadingMemberLookup ? "..." : "Cari"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Member Badge & Points Info */}
+                  {selectedMember && (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                      <div className="flex justify-between items-center font-bold text-emerald-900">
+                        <span>{selectedMember.name} ({selectedMember.tier})</span>
+                        <span>{selectedMember.points} Poin</span>
+                      </div>
+                      {selectedMember.points > 0 && rawCartTotal > 0 && (
+                        <label className="flex items-center gap-1.5 text-[11px] text-emerald-800 cursor-pointer pt-1 border-t border-emerald-200/60">
+                          <input
+                            type="checkbox"
+                            checked={isRedeemingPoints}
+                            onChange={e => setIsRedeemingPoints(e.target.checked)}
+                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span>Tukarkan {maxRedeemablePoints} poin (-{fmt(pointsDiscount)})</span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cart Items List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {cart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                      <ShoppingCart size={40} className="text-slate-300 mb-2" />
+                      <p className="text-xs font-semibold">Keranjang Masih Kosong</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Pilih produk dari katalog di sebelah kiri</p>
+                    </div>
+                  ) : (
+                    cart.map(item => (
+                      <div key={item.variant_id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-slate-800 truncate">{item.name}</h4>
+                          <span className="text-[11px] text-slate-500">{fmt(item.price)} / pcs</span>
+                        </div>
+
+                        {/* Interactive Qty Controls */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => updateQty(item.variant_id, item.qty - 1)}
+                            className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
+                          >
+                            -
+                          </button>
+                          <span className="w-7 text-center font-bold text-xs text-slate-800">{item.qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateQty(item.variant_id, item.qty + 1)}
+                            className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Subtotal & Trash */}
+                        <div className="text-right min-w-[70px]">
+                          <div className="font-bold text-xs text-slate-900">{fmt(item.qty * item.price)}</div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeCart(item.variant_id)}
+                          className="text-slate-400 hover:text-red-600 p-1 transition"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Checkout & Payment Bottom Section */}
+                <div className="p-3 border-t border-slate-200 bg-slate-50/80 space-y-2.5">
+                  
+                  {/* Totals & Discounts */}
+                  <div className="space-y-1 text-xs">
+                    {pointsDiscount > 0 && (
+                      <div className="flex justify-between text-emerald-700 font-medium">
+                        <span>Diskon Loyalty Poin:</span>
+                        <span>-{fmt(pointsDiscount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-baseline font-black">
+                      <span className="text-slate-700 text-xs uppercase tracking-wider">Total Belanja:</span>
+                      <span className="text-emerald-700 text-lg font-black">{fmt(cartTotal)}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Method Tabs */}
+                  <div className="grid grid-cols-4 gap-1 bg-white p-1 rounded-xl border border-slate-200 text-[11px] font-bold text-center">
+                    {(["Tunai", "QRIS", "Debit", "Split"] as const).map(method => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        className={`py-1.5 rounded-lg transition-all ${
+                          paymentMethod === method
+                            ? "bg-emerald-600 text-white shadow-2xs"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {method}
+                      </button>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Payment Specific Input Area */}
+                  {paymentMethod === "Tunai" && (
+                    <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-200">
+                      {/* Quick Cash Buttons */}
+                      <div className="flex flex-wrap gap-1">
+                        {quickCashAmounts.map(qc => (
+                          <button
+                            key={qc.label}
+                            type="button"
+                            onClick={() => setCashReceived(qc.val)}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 text-slate-700 transition"
+                          >
+                            {qc.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-2.5 top-1.5 text-slate-400 text-xs font-bold">Rp</span>
+                          <input
+                            type="number"
+                            value={cashReceived}
+                            onChange={e => setCashReceived(e.target.value === "" ? "" : Number(e.target.value))}
+                            placeholder="Uang Diterima..."
+                            className="w-full pl-8 pr-2 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </div>
+                        {Number(cashReceived) >= cartTotal && (
+                          <div className="text-right text-[11px] font-bold text-emerald-700">
+                            Kembali: {fmt(Number(cashReceived) - cartTotal)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentMethod === "QRIS" && (
+                    <div className="bg-white p-2 rounded-xl border border-blue-200 text-center space-y-1">
+                      <p className="text-[11px] font-bold text-blue-800">QRIS Dinamis Otomatis</p>
+                      <p className="text-[10px] text-slate-500">Scan QR Code pelanggan melalui aplikasi banking/e-wallet</p>
+                    </div>
+                  )}
+
+                  {paymentMethod === "Debit" && (
+                    <div className="bg-white p-2 rounded-xl border border-purple-200 grid grid-cols-2 gap-2 text-xs">
+                      <select
+                        value={debitBank}
+                        onChange={e => setDebitBank(e.target.value)}
+                        className="p-1 border border-slate-200 rounded-lg text-xs font-semibold"
+                      >
+                        <option value="BCA">EDC BCA</option>
+                        <option value="Mandiri">EDC Mandiri</option>
+                        <option value="BRI">EDC BRI</option>
+                        <option value="BNI">EDC BNI</option>
+                      </select>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        value={cardLast4}
+                        onChange={e => setCardLast4(e.target.value)}
+                        placeholder="4 Digit Kartu"
+                        className="p-1 border border-slate-200 rounded-lg text-xs font-mono"
+                      />
+                    </div>
+                  )}
+
+                  {paymentMethod === "Split" && (
+                    <div className="bg-white p-2 rounded-xl border border-amber-200 space-y-1 text-xs">
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={splitCash}
+                          onChange={e => setSplitCash(e.target.value === "" ? "" : Number(e.target.value))}
+                          placeholder="Nominal Tunai..."
+                          className="flex-1 p-1 border border-slate-200 rounded-lg text-xs font-bold"
+                        />
+                        <span className="text-[10px] self-center text-slate-500">
+                          Non-Tunai: {fmt(Math.max(0, cartTotal - (Number(splitCash) || 0)))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Big Checkout Button */}
+                  <button
+                    type="button"
+                    disabled={cart.length === 0 || loadingSubmit}
+                    onClick={handleSimpan}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm shadow-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    {loadingSubmit ? (
+                      <span>Memproses Transaksi...</span>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={18} />
+                        <span>BAYAR SEKARANG ({fmt(cartTotal)})</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
               </div>
             </div>
+          )}
 
-          </div>
+          {/* TAB 2: DEDICATED RECEIPT RETURN & REFUND WORKFLOW */}
+          {activeMainTab === "retur" && (
+            <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xs p-6 overflow-y-auto max-w-5xl mx-auto space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <RefreshCw className="text-red-600" size={24} />
+                  Modul Retur Pelanggan & Pengembalian Dana (Refund)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Cari struk transaksi asli pelanggan untuk mengisi barang retur secara otomatis dan memproses refund
+                </p>
+              </div>
+
+              {/* Step 1: Lookup Receipt */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <label className="block text-xs font-bold text-slate-700">1. Masukkan Nomor Struk / ID Transaksi</label>
+                <form onSubmit={handleLookupReceipt} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={receiptLookupInput}
+                    onChange={e => setReceiptLookupInput(e.target.value)}
+                    placeholder="Contoh: 1b2c3d4e atau tempelkan ID struk..."
+                    className="flex-1 px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loadingReceiptLookup}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Search size={14} />
+                    <span>{loadingReceiptLookup ? "Mencari..." : "Muat Data Struk"}</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Step 2: Display Original Receipt Items */}
+              {originalReceiptData && (
+                <div className="p-4 bg-red-50/50 border border-red-200 rounded-2xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-bold text-sm text-red-950">
+                        Struk Terverifikasi: #{originalReceiptData.transaction.id.slice(0, 8)}
+                      </h3>
+                      <p className="text-xs text-red-700">
+                        Tanggal: {new Date(originalReceiptData.transaction.created_at).toLocaleString('id-ID')} • Kasir: {originalReceiptData.transaction.kasir_name || "Kasir"}
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-red-100 text-red-800 font-bold text-xs rounded-full">
+                      Total Beli: {fmt(originalReceiptData.transaction.total_amount)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs font-bold text-slate-700">Pilih item barang yang ingin diretur oleh pembeli:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {originalReceiptData.items.map((item: any) => (
+                        <div key={item.id} className="p-3 bg-white border border-red-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                          <div>
+                            <h4 className="font-bold text-xs text-slate-800">{item.product_name}</h4>
+                            <p className="text-[11px] text-slate-500">
+                              SKU: {item.sku} • Sz: {item.size} • Beli: {item.qty} pcs @ {fmt(item.price)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddReceiptItemToCart(item)}
+                            className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+                          >
+                            <Plus size={13} />
+                            <span>+ Retur</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Return Items List & Refund Reason */}
+              {cart.length > 0 && (
+                <div className="space-y-4 pt-2">
+                  <h3 className="font-bold text-sm text-slate-800">Daftar Barang yang Diretur ({cart.length} item):</h3>
+                  <div className="space-y-2">
+                    {cart.map(item => (
+                      <div key={item.variant_id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
+                        <div className="flex-1">
+                          <h4 className="font-bold text-xs text-slate-800">{item.name}</h4>
+                          <span className="text-[11px] text-slate-500">{fmt(item.price)} / pcs</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-700">{item.qty} pcs</span>
+                          <span className="text-xs font-black text-red-600">{fmt(item.qty * item.price)}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeCart(item.variant_id)}
+                            className="p-1 text-slate-400 hover:text-red-600"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Return Reasons & Notes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Alasan Retur</label>
+                      <select
+                        value={returnReason}
+                        onChange={e => setReturnReason(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold outline-none"
+                      >
+                        <option value="Barang Rusak / Cacat">Barang Rusak / Cacat</option>
+                        <option value="Salah Ukuran / Size Tidak Pas">Salah Ukuran / Size Tidak Pas</option>
+                        <option value="Salah Model / Warna">Salah Model / Warna</option>
+                        <option value="Permintaan Pembeli">Permintaan Pembeli</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Metode Pengembalian Dana (Refund)</label>
+                      <select
+                        value={refundMethod}
+                        onChange={e => setRefundMethod(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold outline-none"
+                      >
+                        <option value="Tunai">Uang Tunai Laci Kasir (Cash Refund)</option>
+                        <option value="Transfer">Transfer Bank / E-Wallet</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Total Refund & Submit */}
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <span className="text-xs font-bold text-red-900 uppercase">Total Dana yang Wajib Dikembalikan:</span>
+                      <div className="text-2xl font-black text-red-600">{fmt(cartTotal)}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={loadingSubmit}
+                      onClick={handleSimpan}
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-sm transition flex items-center gap-2"
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>{loadingSubmit ? "Memproses..." : "Selesaikan Retur & Refund"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: DEDICATED SHIFT & RIWAYAT KASIR */}
+          {activeMainTab === "shift" && (
+            <div className="h-full bg-white border border-slate-200 rounded-2xl shadow-xs p-6 overflow-y-auto space-y-6">
+              
+              {/* Shift Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                  <span className="text-xs font-bold text-emerald-800 uppercase">Total Omzet Shift Saya</span>
+                  <div className="text-xl font-black text-emerald-950 mt-1">
+                    {fmt(Number(activeShift?.total_sales || 0))}
+                  </div>
+                  <span className="text-[11px] text-emerald-700 mt-1 block">
+                    {activeShift ? "Shift Sedang Aktif" : "Shift Belum Dibuka"}
+                  </span>
+                </div>
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                  <span className="text-xs font-bold text-blue-800 uppercase">Modal Kas Awal Laci</span>
+                  <div className="text-xl font-black text-blue-950 mt-1">
+                    {fmt(Number(activeShift?.start_cash || 0))}
+                  </div>
+                  <span className="text-[11px] text-blue-700 mt-1 block">
+                    Float Kasir
+                  </span>
+                </div>
+
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl">
+                  <span className="text-xs font-bold text-purple-800 uppercase">Penjualan Non-Tunai</span>
+                  <div className="text-xl font-black text-purple-950 mt-1">
+                    {fmt(Number(activeShift?.total_non_cash_sales || 0))}
+                  </div>
+                  <span className="text-[11px] text-purple-700 mt-1 block">
+                    QRIS & Kartu Debit
+                  </span>
+                </div>
+
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-amber-800 uppercase">Aksi Shift Kasir</span>
+                    <p className="text-xs text-amber-900 mt-0.5 font-medium">{activeShift?.cashier_name || "Kasir"}</p>
+                  </div>
+                  {activeShift ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsCloseShiftModal(true)}
+                      className="mt-2 w-full py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs transition"
+                    >
+                      Tutup Shift (Z-Report)
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsOpenShiftModal(true)}
+                      className="mt-2 w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition"
+                    >
+                      Buka Shift Baru
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Riwayat Transaksi Table */}
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h3 className="font-bold text-base text-slate-800">Riwayat Transaksi Kasir</h3>
+                    <p className="text-xs text-slate-500">Daftar transaksi dan cetak ulang struk pelanggan</p>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-2 text-slate-400" size={15} />
+                    <input
+                      type="text"
+                      value={historySearch}
+                      onChange={e => setHistorySearch(e.target.value)}
+                      placeholder="Cari struk / kasir / metode..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                      <tr>
+                        <th className="p-3">Waktu</th>
+                        <th className="p-3">ID Struk</th>
+                        <th className="p-3">Cabang</th>
+                        <th className="p-3">Tipe</th>
+                        <th className="p-3">Metode Bayar</th>
+                        <th className="p-3">Kasir</th>
+                        <th className="p-3 text-right">Total</th>
+                        <th className="p-3 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td>
+                        </tr>
+                      ) : (
+                        filteredHistory.map(t => (
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 text-slate-600 whitespace-nowrap">
+                              {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </td>
+                            <td className="p-3 font-mono font-bold text-slate-700">#{t.id.slice(0, 8)}</td>
+                            <td className="p-3 text-slate-700 font-medium">{t.warehouse_name}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                t.type === 'Retur' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {t.type}
+                              </span>
+                            </td>
+                            <td className="p-3 font-semibold text-slate-700">{t.payment_method || "Tunai"}</td>
+                            <td className="p-3 text-slate-600">{t.kasir_name || "Kasir"}</td>
+                            <td className="p-3 text-right font-bold text-slate-900">{fmt(t.total_amount)}</td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleReprintReceipt(t)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 rounded-lg font-bold text-[11px] inline-flex items-center gap-1 transition"
+                              >
+                                <Printer size={12} />
+                                <span>Struk</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          )}
+
         </main>
       </div>
 

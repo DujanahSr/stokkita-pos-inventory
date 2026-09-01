@@ -61,6 +61,10 @@ router.post("/register", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Semua field harus diisi" });
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password minimal harus 6 karakter" });
+    }
+
     // Cek email
     const emailCheck = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
     if (emailCheck.rows.length > 0) {
@@ -108,6 +112,10 @@ router.post("/create-user", authenticateJWT, requireRole("Admin"), async (req: R
 
     if (!nama || !email || !password || !role) {
       return res.status(400).json({ message: "Semua field harus diisi" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password minimal harus 6 karakter" });
     }
 
     const emailCheck = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
