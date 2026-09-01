@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { clearCache } from "../redisClient.js";
 import { logAudit } from "../utils/auditLogger.js";
+import { createNotification } from "../utils/notificationHelper.js";
 
 const router = express.Router();
 
@@ -132,6 +133,41 @@ router.post("/", async (req: Request, res: Response) => {
       },
       ipAddress: req.ip || "127.0.0.1"
     });
+
+    // Check for Low Stock (ROP Trigger) and dispatch alerts
+    if (type === "Penjualan") {
+      setImmediate(async () => {
+        try {
+          for (const item of items) {
+            const check = await pool.query(`
+              SELECT i.qty, v.rop, v.sku, p.name as product_name, w.name as warehouse_name
+              FROM inventory i
+              JOIN variants v ON i.variant_id = v.id
+              JOIN products p ON v.product_id = p.id
+              JOIN warehouses w ON i.warehouse_id = w.id
+              WHERE i.warehouse_id = $1 AND i.variant_id = $2
+            `, [warehouse_id, item.variant_id]);
+
+            if (check.rows.length > 0) {
+              const row = check.rows[0];
+              const remaining = Number(row.qty);
+              const ropLimit = Number(row.rop) || 10;
+              if (remaining <= ropLimit) {
+                createNotification({
+                  tenantId: tenant_id,
+                  type: "STOCK_LOW_ROP",
+                  title: `⚠️ Stok Kritis: ${row.product_name} (${row.sku})`,
+                  message: `Sisa stok di ${row.warehouse_name} tinggal ${remaining} pcs (Batas aman ROP: ${ropLimit} pcs). Segera terbitkan Purchase Order ke supplier!`,
+                  link: "/reorder"
+                });
+              }
+            }
+          }
+        } catch (nErr) {
+          console.error("[ROP NOTIFICATION TRIGGER ERROR]:", nErr);
+        }
+      });
+    }
     
     res.status(201).json({ 
       message: "Transaksi berhasil", 

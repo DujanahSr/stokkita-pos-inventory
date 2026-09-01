@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import pool from "./db.js";
 import { connectRedis, clearCache } from "./redisClient.js";
 import { logAudit } from "./utils/auditLogger.js";
+import { createNotification } from "./utils/notificationHelper.js";
 
 async function processOrder(orderData: any) {
     const client = await pool.connect();
@@ -75,6 +76,31 @@ async function processOrder(orderData: any) {
             },
             ipAddress: "127.0.0.1 (RabbitMQ Worker)"
         });
+
+        // Trigger ROP Low Stock Alerts if needed
+        for (const item of orderData.items) {
+            const check = await pool.query(`
+                SELECT i.qty, v.rop, v.sku, p.name as product_name, w.name as warehouse_name
+                FROM inventory i
+                JOIN variants v ON i.variant_id = v.id
+                JOIN products p ON v.product_id = p.id
+                JOIN warehouses w ON i.warehouse_id = w.id
+                WHERE i.warehouse_id = $1 AND i.variant_id = $2
+            `, [orderData.warehouse_id, item.variant_id]);
+
+            if (check.rows.length > 0) {
+                const row = check.rows[0];
+                if (Number(row.qty) <= (Number(row.rop) || 10)) {
+                    createNotification({
+                        tenantId: orderData.tenant_id,
+                        type: "STOCK_LOW_ROP",
+                        title: `⚠️ Stok Kritis Omnichannel: ${row.product_name} (${row.sku})`,
+                        message: `Pesanan ${channelName} membuat sisa stok di ${row.warehouse_name} tinggal ${row.qty} pcs (Batas ROP: ${row.rop || 10} pcs). Segera lakukan PO!`,
+                        link: "/reorder"
+                    });
+                }
+            }
+        }
 
     } catch (error) {
         await client.query("ROLLBACK");
