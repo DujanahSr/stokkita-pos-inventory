@@ -252,16 +252,26 @@ _StokKita Supply Chain & Inventory Operations_`;
     }
   };
 
-  const handleDeleteSupplier = async (id: string, name: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus supplier "${name}"?`)) {
-      try {
-        await api.delete(`/supplier/${id}`);
-        load();
-        toast.success(`Supplier "${name}" berhasil dihapus`);
-      } catch (err: any) {
-        toast.error("Gagal menghapus supplier: " + (err.response?.data?.message || err.message));
+  const handleDeleteSupplier = (id: string, name: string) => {
+    toast.error(`Hapus supplier "${name}"?`, {
+      description: "Data kontak dan riwayat supplier ini akan dihapus dari sistem.",
+      action: {
+        label: "Hapus Supplier",
+        onClick: async () => {
+          try {
+            await api.delete(`/supplier/${id}`);
+            load();
+            toast.success(`Supplier "${name}" berhasil dihapus`);
+          } catch (err: any) {
+            toast.error("Gagal menghapus supplier: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
       }
-    }
+    });
   };
 
   return (

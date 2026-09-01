@@ -399,10 +399,20 @@ export default function Transaksi() {
         } else if (isCrossStockModalOpen) {
           setIsCrossStockModalOpen(false);
         } else if (!isInputFocused && cart.length > 0) {
-          if (confirm("Kosongkan keranjang belanja? (Esc)")) {
-            setCart([]);
-            toast.info("Keranjang belanja dikosongkan");
-          }
+          toast("Kosongkan keranjang belanja?", {
+            description: "Seluruh item dalam transaksi saat ini akan dihapus.",
+            action: {
+              label: "Ya, Kosongkan",
+              onClick: () => {
+                setCart([]);
+                toast.info("Keranjang belanja berhasil dikosongkan");
+              }
+            },
+            cancel: {
+              label: "Batal",
+              onClick: () => {}
+            }
+          });
         }
       }
     };
@@ -450,9 +460,17 @@ export default function Transaksi() {
       toast.success(`Member "${res.data.name}" ditemukan!`);
     } catch (err: any) {
       setSelectedMember(null);
-      if (confirm(`Member dengan nomor "${memberPhoneInput}" belum terdaftar. Apakah Anda ingin mendaftarkannya sekarang secara cepat?`)) {
-        setIsQuickRegisterOpen(true);
-      }
+      toast.warning(`Member dengan nomor "${memberPhoneInput}" belum terdaftar.`, {
+        description: "Daftarkan pelanggan baru ke loyalty reward?",
+        action: {
+          label: "+ Daftar Member",
+          onClick: () => setIsQuickRegisterOpen(true)
+        },
+        cancel: {
+          label: "Batal",
+          onClick: () => {}
+        }
+      });
     } finally {
       setLoadingMemberLookup(false);
     }
@@ -653,28 +671,50 @@ export default function Transaksi() {
   };
 
   const handleRecallCart = (heldCart: HeldCart) => {
-    if (cart.length > 0) {
-      if (!confirm(`Keranjang kasir saat ini sedang berisi ${cart.length} item. Apakah Anda ingin menimpa keranjang dengan antrean "${heldCart.name}"?`)) {
-        return;
+    const doRecall = () => {
+      if (heldCart.warehouse_id && heldCart.warehouse_id !== selectedW) {
+        setSelectedW(heldCart.warehouse_id);
       }
+      setCart([...heldCart.items]);
+      setHeldCarts(prev => prev.filter(h => h.id !== heldCart.id));
+      setIsHeldListModalOpen(false);
+      setIsModalOpen(true);
+      toast.info(`Memuat kembali transaksi antrean "${heldCart.name}"`);
+    };
+
+    if (cart.length > 0) {
+      toast.warning(`Timpa keranjang saat ini?`, {
+        description: `Keranjang kasir sedang berisi ${cart.length} item. Yakin ingin menimpa dengan antrean "${heldCart.name}"?`,
+        action: {
+          label: "Ya, Timpa",
+          onClick: doRecall
+        },
+        cancel: {
+          label: "Batal",
+          onClick: () => {}
+        }
+      });
+      return;
     }
 
-    if (heldCart.warehouse_id && heldCart.warehouse_id !== selectedW) {
-      setSelectedW(heldCart.warehouse_id);
-    }
-
-    setCart([...heldCart.items]);
-    setHeldCarts(prev => prev.filter(h => h.id !== heldCart.id));
-    setIsHeldListModalOpen(false);
-    setIsModalOpen(true);
-    toast.info(`Memuat kembali transaksi antrean "${heldCart.name}"`);
+    doRecall();
   };
 
   const handleDeleteHeldCart = (heldCartId: string, name: string) => {
-    if (confirm(`Apakah Anda yakin ingin membatalkan dan menghapus antrean terparkir "${name}"?`)) {
-      setHeldCarts(prev => prev.filter(h => h.id !== heldCartId));
-      toast.info(`Antrean "${name}" dibatalkan`);
-    }
+    toast.error(`Batalkan antrean "${name}"?`, {
+      description: "Data transaksi antrean terparkir ini akan dihapus permanen.",
+      action: {
+        label: "Hapus Antrean",
+        onClick: () => {
+          setHeldCarts(prev => prev.filter(h => h.id !== heldCartId));
+          toast.info(`Antrean "${name}" dibatalkan`);
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
   };
 
   // Submit Transaction
@@ -835,9 +875,17 @@ export default function Transaksi() {
 
   const handleOpenTransactionModal = () => {
     if (!activeShift) {
-      if (confirm("Shift kasir belum dibuka. Buka shift kasir terlebih dahulu untuk mulai melayani transaksi?")) {
-        setIsOpenShiftModal(true);
-      }
+      toast.warning("Shift kasir belum dibuka!", {
+        description: "Buka shift kasir terlebih dahulu untuk mulai melayani pembayaran.",
+        action: {
+          label: "Buka Shift",
+          onClick: () => setIsOpenShiftModal(true)
+        },
+        cancel: {
+          label: "Tutup",
+          onClick: () => {}
+        }
+      });
       return;
     }
     setCashReceived(cartTotal || "");
@@ -1092,9 +1140,17 @@ export default function Transaksi() {
                             key={inv.variant_id}
                             onClick={() => {
                               if (!activeShift) {
-                                if (confirm("Shift kasir belum dibuka. Buka shift kasir terlebih dahulu?")) {
-                                  setIsOpenShiftModal(true);
-                                }
+                                toast.warning("Shift kasir belum dibuka!", {
+                                  description: "Buka shift kasir terlebih dahulu untuk menambahkan produk.",
+                                  action: {
+                                    label: "Buka Shift",
+                                    onClick: () => setIsOpenShiftModal(true)
+                                  },
+                                  cancel: {
+                                    label: "Tutup",
+                                    onClick: () => {}
+                                  }
+                                });
                                 return;
                               }
                               handleAddToCart(inv.variant_id);

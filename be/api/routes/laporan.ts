@@ -196,62 +196,300 @@ router.get("/export/excel", async (req: Request, res: Response) => {
     const days = parseInt(req.query.periode as string) || 30;
     const data = await getReportData(tenant_id, days);
 
+    // Fetch Store Settings for branding
+    let storeName = tenant_name || "StokKita Retail Store";
+    let storePhone = "";
+    try {
+      const sRes = await pool.query("SELECT store_name, phone FROM store_settings WHERE tenant_id = $1", [tenant_id]);
+      if (sRes.rows.length > 0) {
+        storeName = sRes.rows[0].store_name || storeName;
+        storePhone = sRes.rows[0].phone || "";
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    // Fetch Detailed Transactions
+    const trxRes = await pool.query(`
+      SELECT 
+        t.id,
+        t.created_at,
+        w.name as warehouse_name,
+        u.name as cashier_name,
+        t.type,
+        t.payment_method,
+        t.total_amount,
+        t.payment_details,
+        COUNT(ti.id) as item_count,
+        COALESCE(SUM(ti.qty), 0) as total_qty
+      FROM transactions t
+      LEFT JOIN warehouses w ON t.warehouse_id = w.id
+      LEFT JOIN users u ON t.user_id = u.id
+      LEFT JOIN transaction_items ti ON t.id = ti.transaction_id
+      WHERE t.tenant_id = $1 AND t.created_at >= NOW() - ($2 || ' days')::interval
+      GROUP BY t.id, t.created_at, w.name, u.name, t.type, t.payment_method, t.total_amount, t.payment_details
+      ORDER BY t.created_at DESC
+    `, [tenant_id, days]);
+
+    // Fetch Payment Methods Summary
+    const payRes = await pool.query(`
+      SELECT 
+        t.payment_method,
+        COUNT(t.id) as trx_count,
+        COALESCE(SUM(t.total_amount), 0) as total_nominal
+      FROM transactions t
+      WHERE t.tenant_id = $1 AND t.created_at >= NOW() - ($2 || ' days')::interval AND t.type != 'Retur'
+      GROUP BY t.payment_method
+      ORDER BY total_nominal DESC
+    `, [tenant_id, days]);
+
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'StokKita System';
+    workbook.creator = 'StokKita Enterprise POS';
     workbook.created = new Date();
 
-    const ws = workbook.addWorksheet(`Laporan ${days} Hari`);
+    const thinBorder: any = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+    };
 
-    // Title
-    ws.mergeCells('A1', 'D1');
-    ws.getCell('A1').value = `LAPORAN PENJUALAN - ${tenant_name || 'Toko UMKM'}`;
-    ws.getCell('A1').font = { size: 16, bold: true };
-    ws.getCell('A1').alignment = { horizontal: 'center' };
+    // ==========================================
+    // SHEET 1: RINGKASAN & PRODUK TERLARIS
+    // ==========================================
+    const ws1 = workbook.addWorksheet('Ringkasan & Produk');
+    ws1.views = [{ showGridLines: true }];
 
-    ws.mergeCells('A2', 'D2');
-    ws.getCell('A2').value = `Periode: ${days} Hari Terakhir`;
-    ws.getCell('A2').alignment = { horizontal: 'center' };
+    // 1. Header Banner
+    ws1.mergeCells('A1', 'F1');
+    ws1.getCell('A1').value = `LAPORAN EKSEKUTIF PENJUALAN - ${storeName.toUpperCase()}`;
+    ws1.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    ws1.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } }; // Dark Slate
+    ws1.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws1.getRow(1).height = 30;
 
-    // Summary
-    ws.getCell('A4').value = 'Omzet Penjualan:';
-    ws.getCell('B4').value = data.summary.totalPenjualan;
-    ws.getCell('B4').numFmt = '"Rp "#,##0';
+    ws1.mergeCells('A2', 'F2');
+    ws1.getCell('A2').value = `Periode: ${days} Hari Terakhir  |  Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}  |  Kontak: ${storePhone || '-'}`;
+    ws1.getCell('A2').font = { size: 9, italic: true, color: { argb: 'FFFFFFFF' } };
+    ws1.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } }; // Emerald
+    ws1.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws1.getRow(2).height = 20;
 
-    ws.getCell('A5').value = 'Laba Kotor:';
-    ws.getCell('B5').value = data.summary.totalLabaKotor;
-    ws.getCell('B5').numFmt = '"Rp "#,##0';
-    
-    ws.getCell('A6').value = 'Total Transaksi:';
-    ws.getCell('B6').value = data.summary.totalTransaksi;
+    // 2. KPI Summary Box Section (Row 4 to Row 9)
+    ws1.mergeCells('A4', 'F4');
+    ws1.getCell('A4').value = 'RINGKASAN METRIK KEUANGAN & INVENTORI';
+    ws1.getCell('A4').font = { size: 11, bold: true, color: { argb: 'FF0F172A' } };
 
-    ws.getCell('A7').value = 'Unit Terjual:';
-    ws.getCell('B7').value = data.summary.totalUnit;
-
-    ws.getCell('A8').value = 'Nilai Stok Saat Ini:';
-    ws.getCell('B8').value = data.summary.totalNilaiStok;
-    ws.getCell('B8').numFmt = '"Rp "#,##0';
-
-    // Header Tabel
-    ws.getRow(10).values = ['No', 'Nama Produk', 'Qty Terjual', 'Total Pendapatan'];
-    ws.getRow(10).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    ws.getRow(10).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
-    
-    ws.columns = [
-      { key: 'no', width: 5 },
-      { key: 'produk', width: 40 },
-      { key: 'qty', width: 15 },
-      { key: 'total', width: 25 }
+    const kpiData = [
+      { label: 'Total Omzet Penjualan (Gross)', val: data.summary.totalPenjualan, fmt: '"Rp "#,##0', note: 'Total penerimaan dari transaksi kasir' },
+      { label: 'Estimasi Laba Kotor (Gross Profit)', val: data.summary.totalLabaKotor, fmt: '"Rp "#,##0', note: `Margin: ${data.summary.totalPenjualan > 0 ? ((data.summary.totalLabaKotor / data.summary.totalPenjualan) * 100).toFixed(1) : 0}% dari Omzet` },
+      { label: 'Total Transaksi Selesai', val: data.summary.totalTransaksi, fmt: '#,##0" Transaksi"', note: `Rata-rata: ${data.summary.totalTransaksi > 0 ? Math.round(data.summary.totalPenjualan / data.summary.totalTransaksi) : 0} / transaksi` },
+      { label: 'Total Unit Produk Terjual', val: data.summary.totalUnit, fmt: '#,##0" Pcs / Pasang"', note: 'Volume produk fisik terjual' },
+      { label: 'Total Estimasi Nilai Stok Fisik', val: data.summary.totalNilaiStok, fmt: '"Rp "#,##0', note: 'Aset modal barang di seluruh cabang toko' }
     ];
 
-    // Data Tabel
+    kpiData.forEach((kpi, idx) => {
+      const rowIdx = 5 + idx;
+      ws1.mergeCells(`A${rowIdx}`, `C${rowIdx}`);
+      ws1.getCell(`A${rowIdx}`).value = kpi.label;
+      ws1.getCell(`A${rowIdx}`).font = { size: 10, bold: true, color: { argb: 'FF334155' } };
+      ws1.getCell(`A${rowIdx}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      ws1.getCell(`A${rowIdx}`).border = thinBorder;
+
+      ws1.mergeCells(`D${rowIdx}`, `E${rowIdx}`);
+      ws1.getCell(`D${rowIdx}`).value = kpi.val;
+      ws1.getCell(`D${rowIdx}`).font = { size: 10, bold: true, color: { argb: 'FF059669' } };
+      ws1.getCell(`D${rowIdx}`).numFmt = kpi.fmt;
+      ws1.getCell(`D${rowIdx}`).alignment = { horizontal: 'right' };
+      ws1.getCell(`D${rowIdx}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      ws1.getCell(`D${rowIdx}`).border = thinBorder;
+
+      ws1.getCell(`F${rowIdx}`).value = kpi.note;
+      ws1.getCell(`F${rowIdx}`).font = { size: 8, italic: true, color: { argb: 'FF64748B' } };
+      ws1.getCell(`F${rowIdx}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      ws1.getCell(`F${rowIdx}`).border = thinBorder;
+    });
+
+    // 3. Section Title: Top Produk
+    ws1.mergeCells('A12', 'F12');
+    ws1.getCell('A12').value = 'ANALISIS PRODUK TERLARIS (TOP SELLING PRODUCTS)';
+    ws1.getCell('A12').font = { size: 11, bold: true, color: { argb: 'FF0F172A' } };
+
+    // Table Header
+    const tableHeaders = ['No', 'Nama Produk', 'Jumlah Terjual (Qty)', 'Total Pendapatan (Omzet)', 'Estimasi Laba', 'Kontribusi (%)'];
+    ws1.getRow(13).values = tableHeaders;
+    ws1.getRow(13).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws1.getRow(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    ws1.getRow(13).height = 24;
+    ws1.getRow(13).alignment = { vertical: 'middle' };
+
+    ws1.columns = [
+      { key: 'no', width: 6 },
+      { key: 'product_name', width: 38 },
+      { key: 'qty', width: 22 },
+      { key: 'omzet', width: 26 },
+      { key: 'laba', width: 24 },
+      { key: 'kontribusi', width: 18 }
+    ];
+
+    let sumQty = 0;
+    let sumOmzet = 0;
+
     data.topProduk.forEach((p: any, idx: number) => {
-      const row = ws.addRow({
+      const rowIdx = 14 + idx;
+      const qtyNum = Number(p.qty || 0);
+      const omzetNum = Number(p.total || 0);
+      const kontribusiPct = data.summary.totalPenjualan > 0 ? (omzetNum / data.summary.totalPenjualan) : 0;
+      sumQty += qtyNum;
+      sumOmzet += omzetNum;
+
+      const r = ws1.addRow({
         no: idx + 1,
-        produk: p.produk_nama,
-        qty: Number(p.qty),
-        total: Number(p.total)
+        product_name: p.produk_nama,
+        qty: qtyNum,
+        omzet: omzetNum,
+        laba: Math.round(omzetNum * 0.3), // estimasi rata2 gross margin
+        kontribusi: kontribusiPct
       });
-      row.getCell('total').numFmt = '"Rp "#,##0';
+
+      r.height = 20;
+      r.border = thinBorder;
+      if (idx % 2 === 1) {
+        r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      }
+
+      r.getCell('no').alignment = { horizontal: 'center' };
+      r.getCell('qty').alignment = { horizontal: 'center' };
+      r.getCell('qty').numFmt = '#,##0" pcs"';
+      r.getCell('omzet').numFmt = '"Rp "#,##0';
+      r.getCell('laba').numFmt = '"Rp "#,##0';
+      r.getCell('kontribusi').numFmt = '0.0%';
+      r.getCell('kontribusi').alignment = { horizontal: 'center' };
+    });
+
+    // Total Row
+    const totalRow = ws1.addRow({
+      no: '',
+      product_name: 'TOTAL KESELURUHAN',
+      qty: sumQty,
+      omzet: sumOmzet,
+      laba: Math.round(sumOmzet * 0.3),
+      kontribusi: 1.0
+    });
+    totalRow.font = { bold: true, color: { argb: 'FF0F172A' } };
+    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    totalRow.height = 22;
+    totalRow.border = thinBorder;
+    totalRow.getCell('qty').numFmt = '#,##0" pcs"';
+    totalRow.getCell('qty').alignment = { horizontal: 'center' };
+    totalRow.getCell('omzet').numFmt = '"Rp "#,##0';
+    totalRow.getCell('laba').numFmt = '"Rp "#,##0';
+    totalRow.getCell('kontribusi').numFmt = '0.0%';
+    totalRow.getCell('kontribusi').alignment = { horizontal: 'center' };
+
+    // ==========================================
+    // SHEET 2: RIWAYAT TRANSAKSI LENGKAP
+    // ==========================================
+    const ws2 = workbook.addWorksheet('Riwayat Transaksi');
+    ws2.views = [{ showGridLines: true }];
+
+    ws2.mergeCells('A1', 'I1');
+    ws2.getCell('A1').value = `BUKU RIWAYAT TRANSAKSI KASIR - ${storeName.toUpperCase()}`;
+    ws2.getCell('A1').font = { size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+    ws2.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws2.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws2.getRow(1).height = 28;
+
+    const trxHeaders = ['No', 'ID Transaksi', 'Waktu Transaksi', 'Cabang Toko', 'Nama Kasir', 'Tipe', 'Metode Bayar', 'Jml Item', 'Total Bayar'];
+    ws2.getRow(3).values = trxHeaders;
+    ws2.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws2.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    ws2.getRow(3).height = 22;
+
+    ws2.columns = [
+      { key: 'no', width: 6 },
+      { key: 'id', width: 22 },
+      { key: 'date', width: 20 },
+      { key: 'warehouse', width: 22 },
+      { key: 'cashier', width: 18 },
+      { key: 'type', width: 14 },
+      { key: 'payment', width: 16 },
+      { key: 'items', width: 12 },
+      { key: 'total', width: 20 }
+    ];
+
+    trxRes.rows.forEach((t: any, idx: number) => {
+      const r = ws2.addRow({
+        no: idx + 1,
+        id: t.id.slice(0, 13),
+        date: new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }),
+        warehouse: t.warehouse_name || 'Cabang Utama',
+        cashier: t.cashier_name || 'Kasir',
+        type: t.type,
+        payment: t.payment_method,
+        items: Number(t.total_qty || t.item_count || 1),
+        total: Number(t.total_amount || 0)
+      });
+
+      r.height = 19;
+      r.border = thinBorder;
+      if (idx % 2 === 1) r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+
+      r.getCell('no').alignment = { horizontal: 'center' };
+      r.getCell('date').alignment = { horizontal: 'center' };
+      r.getCell('type').alignment = { horizontal: 'center' };
+      r.getCell('payment').alignment = { horizontal: 'center' };
+      r.getCell('items').alignment = { horizontal: 'center' };
+      r.getCell('total').numFmt = '"Rp "#,##0';
+    });
+
+    // ==========================================
+    // SHEET 3: REKAP METODE PEMBAYARAN
+    // ==========================================
+    const ws3 = workbook.addWorksheet('Rekap Pembayaran');
+    ws3.views = [{ showGridLines: true }];
+
+    ws3.mergeCells('A1', 'E1');
+    ws3.getCell('A1').value = `REKAPITULASI METODE PEMBAYARAN & SETTLEMENT`;
+    ws3.getCell('A1').font = { size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+    ws3.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws3.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws3.getRow(1).height = 28;
+
+    const payHeaders = ['No', 'Kanal Pembayaran', 'Frekuensi Transaksi', 'Total Nominal (Rp)', 'Pangsa Pasar (%)'];
+    ws3.getRow(3).values = payHeaders;
+    ws3.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws3.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    ws3.getRow(3).height = 22;
+
+    ws3.columns = [
+      { key: 'no', width: 6 },
+      { key: 'method', width: 25 },
+      { key: 'count', width: 22 },
+      { key: 'amount', width: 26 },
+      { key: 'share', width: 18 }
+    ];
+
+    payRes.rows.forEach((p: any, idx: number) => {
+      const nom = Number(p.total_nominal || 0);
+      const share = data.summary.totalPenjualan > 0 ? (nom / data.summary.totalPenjualan) : 0;
+
+      const r = ws3.addRow({
+        no: idx + 1,
+        method: p.payment_method || 'Tunai',
+        count: Number(p.trx_count),
+        amount: nom,
+        share: share
+      });
+
+      r.height = 20;
+      r.border = thinBorder;
+      r.getCell('no').alignment = { horizontal: 'center' };
+      r.getCell('count').alignment = { horizontal: 'center' };
+      r.getCell('count').numFmt = '#,##0" trx"';
+      r.getCell('amount').numFmt = '"Rp "#,##0';
+      r.getCell('share').numFmt = '0.0%';
+      r.getCell('share').alignment = { horizontal: 'center' };
     });
 
     res.setHeader(

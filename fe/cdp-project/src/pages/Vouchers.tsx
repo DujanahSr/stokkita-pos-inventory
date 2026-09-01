@@ -72,15 +72,26 @@ export default function Vouchers() {
     }
   };
 
-  const handleDeleteVoucher = async (id: string, code: string) => {
-    if (!confirm(`Hapus voucher promo "${code}"?`)) return;
-    try {
-      await api.delete(`/vouchers/${id}`);
-      toast.success(`Voucher "${code}" berhasil dihapus`);
-      loadVouchers();
-    } catch (err: any) {
-      toast.error("Gagal menghapus voucher: " + (err.response?.data?.message || err.message));
-    }
+  const handleDeleteVoucher = (id: string, code: string) => {
+    toast.error(`Hapus voucher promo "${code}"?`, {
+      description: "Voucher ini tidak akan bisa digunakan lagi oleh kasir.",
+      action: {
+        label: "Hapus",
+        onClick: async () => {
+          try {
+            await api.delete(`/vouchers/${id}`);
+            toast.success(`Voucher "${code}" berhasil dihapus`);
+            loadVouchers();
+          } catch (err: any) {
+            toast.error("Gagal menghapus voucher: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
   };
 
   const filteredVouchers = vouchers.filter(v => 

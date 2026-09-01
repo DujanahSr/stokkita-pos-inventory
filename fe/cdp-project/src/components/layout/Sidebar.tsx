@@ -52,19 +52,23 @@ export default function Sidebar() {
       const activeShift = res.data?.active_shift;
 
       if (activeShift) {
-        const confirmLogout = confirm(
-          `⚠️ PERINGATAN SHIFT KASIR AKTIF!\n\n` +
-          `Shift kasir Anda di cabang "${activeShift.warehouse_name}" masih AKTIF (belum ditutup/Z-Report).\n\n` +
-          `Disarankan untuk menutup shift kasir terlebih dahulu agar rekonsiliasi laci kas tercatat rapi.\n\n` +
-          `Apakah Anda yakin tetap ingin keluar sekarang?`
-        );
-
-        if (!confirmLogout) {
-          navigate("/transaksi");
-          toast.info(`Silakan tutup shift kasir di cabang "${activeShift.warehouse_name}"`);
-          setLoggingOut(false);
-          return;
-        }
+        toast.warning(`Shift kasir di "${activeShift.warehouse_name}" masih aktif!`, {
+          description: "Shift belum ditutup (Z-Report). Yakin ingin tetap keluar sekarang?",
+          duration: 10000,
+          action: {
+            label: "Tetap Keluar",
+            onClick: () => logout()
+          },
+          cancel: {
+            label: "Batal / Tutup Shift",
+            onClick: () => {
+              navigate("/transaksi");
+              toast.info(`Silakan tutup shift kasir di cabang "${activeShift.warehouse_name}"`);
+            }
+          }
+        });
+        setLoggingOut(false);
+        return;
       }
 
       logout();

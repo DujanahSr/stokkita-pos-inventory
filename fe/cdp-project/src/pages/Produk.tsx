@@ -168,15 +168,26 @@ export default function Produk() {
   };
 
   // Delete Product
-  const handleDeleteProduct = async (id: string, name: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus produk "${name}" dan seluruh variannya?`)) return;
-    try {
-      await api.delete(`/produk/${id}`);
-      loadData();
-      toast.success(`Produk "${name}" berhasil dihapus`);
-    } catch (err: any) {
-      toast.error("Gagal menghapus produk: " + (err.response?.data?.message || err.message));
-    }
+  const handleDeleteProduct = (id: string, name: string) => {
+    toast.error(`Hapus produk "${name}"?`, {
+      description: "Seluruh varian SKU dan data stok terkait akan ikut terhapus.",
+      action: {
+        label: "Hapus Produk",
+        onClick: async () => {
+          try {
+            await api.delete(`/produk/${id}`);
+            loadData();
+            toast.success(`Produk "${name}" berhasil dihapus`);
+          } catch (err: any) {
+            toast.error("Gagal menghapus produk: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
   };
 
   // Add Single Variant
@@ -216,15 +227,26 @@ export default function Produk() {
   };
 
   // Delete Single Variant
-  const handleDeleteVariant = async (variantId: string, sku: string) => {
-    if (!confirm(`Hapus varian dengan SKU "${sku}"?`)) return;
-    try {
-      await api.delete(`/produk/variants/${variantId}`);
-      loadData();
-      toast.success(`Varian "${sku}" berhasil dihapus`);
-    } catch (err: any) {
-      toast.error("Gagal menghapus varian: " + (err.response?.data?.message || err.message));
-    }
+  const handleDeleteVariant = (variantId: string, sku: string) => {
+    toast.error(`Hapus varian "${sku}"?`, {
+      description: "Data varian ini akan dihapus dari katalog.",
+      action: {
+        label: "Hapus Varian",
+        onClick: async () => {
+          try {
+            await api.delete(`/produk/variants/${variantId}`);
+            loadData();
+            toast.success(`Varian "${sku}" berhasil dihapus`);
+          } catch (err: any) {
+            toast.error("Gagal menghapus varian: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
   };
 
   // Export Master Produk to Excel

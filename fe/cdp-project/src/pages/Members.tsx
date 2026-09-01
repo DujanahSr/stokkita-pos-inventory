@@ -79,16 +79,26 @@ export default function Members() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus member "${name}"?`)) {
-      try {
-        await api.delete(`/members/${id}`);
-        toast.success(`Member "${name}" berhasil dihapus`);
-        fetchMembers();
-      } catch (err: any) {
-        toast.error("Gagal menghapus member: " + (err.response?.data?.message || err.message));
+  const handleDelete = (id: string, name: string) => {
+    toast.error(`Hapus member "${name}"?`, {
+      description: "Data saldo poin dan riwayat loyalitas member ini akan dihapus.",
+      action: {
+        label: "Hapus Member",
+        onClick: async () => {
+          try {
+            await api.delete(`/members/${id}`);
+            toast.success(`Member "${name}" berhasil dihapus`);
+            fetchMembers();
+          } catch (err: any) {
+            toast.error("Gagal menghapus member: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
       }
-    }
+    });
   };
 
   const handleExportExcel = async () => {
@@ -227,15 +237,19 @@ export default function Members() {
                       const tierColor = m.tier === "Platinum" ? "bg-purple-100 text-purple-800 border-purple-200" : m.tier === "Gold" ? "bg-amber-100 text-amber-800 border-amber-200" : "bg-slate-100 text-slate-700 border-slate-200";
                       return (
                         <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3.5 pl-6 font-bold text-slate-800 flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[11px]">
-                              {m.name.charAt(0).toUpperCase()}
+                          <td className="p-3.5 pl-6 font-bold text-slate-800">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[11px] flex-shrink-0">
+                                {m.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="truncate">{m.name}</span>
                             </div>
-                            <span>{m.name}</span>
                           </td>
-                          <td className="p-3.5 text-slate-700 font-mono flex items-center gap-1.5 pt-4">
-                            <Phone size={13} className="text-emerald-600" />
-                            <span>{m.phone}</span>
+                          <td className="p-3.5 text-slate-700 font-mono">
+                            <div className="flex items-center gap-1.5">
+                              <Phone size={13} className="text-emerald-600 flex-shrink-0" />
+                              <span>{m.phone}</span>
+                            </div>
                           </td>
                           <td className="p-3.5 text-slate-500">{m.email || "-"}</td>
                           <td className="p-3.5 text-center">
