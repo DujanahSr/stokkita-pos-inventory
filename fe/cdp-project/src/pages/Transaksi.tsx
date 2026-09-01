@@ -9,7 +9,8 @@ import {
   Wallet, QrCode, CreditCard, Layers, Clock, CheckCircle2, 
   AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock,
   Pause, Play, ShoppingCart, Bookmark,
-  Crown, Gift, Sparkles, UserCheck, Search, X, Phone
+  Crown, Gift, Sparkles, UserCheck, Search, X, Phone,
+  Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw
 } from "lucide-react";
 
 interface HeldCart {
@@ -41,6 +42,14 @@ export default function Transaksi() {
   const [zReportData, setZReportData] = useState<any>(null);
   const [loadingShift, setLoadingShift] = useState(false);
 
+  // Petty Cash / Kas Laci Movements State
+  const [isPettyCashModalOpen, setIsPettyCashModalOpen] = useState(false);
+  const [pettyCashType, setPettyCashType] = useState<"CASH_IN" | "CASH_OUT">("CASH_OUT");
+  const [pettyCashAmount, setPettyCashAmount] = useState<number | "">("");
+  const [pettyCashReason, setPettyCashReason] = useState("");
+  const [pettyCashMovements, setPettyCashMovements] = useState<any[]>([]);
+  const [loadingPettyCash, setLoadingPettyCash] = useState(false);
+
   // Cart & POS Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -54,6 +63,16 @@ export default function Transaksi() {
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [isRedeemingPoints, setIsRedeemingPoints] = useState(false);
   const [loadingMemberLookup, setLoadingMemberLookup] = useState(false);
+  const [isQuickRegisterOpen, setIsQuickRegisterOpen] = useState(false);
+  const [quickMemberName, setQuickMemberName] = useState("");
+  const [quickMemberTier, setQuickMemberTier] = useState("Silver");
+  const [savingQuickMember, setSavingQuickMember] = useState(false);
+
+  // Cross-Branch Stock Checker State
+  const [isCrossStockModalOpen, setIsCrossStockModalOpen] = useState(false);
+  const [crossStockSearch, setCrossStockSearch] = useState("");
+  const [crossStockList, setCrossStockList] = useState<any[]>([]);
+  const [loadingCrossStock, setLoadingCrossStock] = useState(false);
 
   // Multi-Cart / Hold Transaction State
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>(() => {
@@ -261,10 +280,35 @@ export default function Transaksi() {
       setSelectedMember(res.data);
       setIsRedeemingPoints(false);
     } catch (err: any) {
-      alert("Member dengan nomor telepon ini tidak ditemukan. Silakan daftarkan di menu Pelanggan & Member.");
       setSelectedMember(null);
+      if (confirm(`Member dengan nomor "${memberPhoneInput}" belum terdaftar. Apakah Anda ingin mendaftarkannya sekarang secara cepat?`)) {
+        setIsQuickRegisterOpen(true);
+      }
     } finally {
       setLoadingMemberLookup(false);
+    }
+  };
+
+  const handleQuickRegisterMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickMemberName.trim() || !memberPhoneInput.trim()) {
+      return alert("Nama dan nomor WhatsApp wajib diisi!");
+    }
+    setSavingQuickMember(true);
+    try {
+      const res = await api.post("/members", {
+        name: quickMemberName.trim(),
+        phone: memberPhoneInput.trim(),
+        tier: quickMemberTier
+      });
+      setSelectedMember(res.data.member);
+      setIsQuickRegisterOpen(false);
+      setQuickMemberName("");
+      alert(`Member "${res.data.member.name}" berhasil didaftarkan dan langsung terpilih!`);
+    } catch (err: any) {
+      alert("Gagal mendaftarkan member: " + (err.response?.data?.message || err.message));
+    } finally {
+      setSavingQuickMember(false);
     }
   };
 
@@ -272,6 +316,84 @@ export default function Transaksi() {
     setSelectedMember(null);
     setMemberPhoneInput("");
     setIsRedeemingPoints(false);
+  };
+
+  // Petty Cash Handlers
+  const fetchPettyCashMovements = async (shiftId: string) => {
+    if (!shiftId) return;
+    try {
+      const res = await api.get(`/shift/cash-movements?shift_id=${shiftId}`);
+      setPettyCashMovements(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSavePettyCash = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeShift) return alert("Buka shift kasir terlebih dahulu!");
+    if (!pettyCashAmount || Number(pettyCashAmount) <= 0 || !pettyCashReason.trim()) {
+      return alert("Nominal kas dan alasan pengeluaran/pemasukan wajib diisi!");
+    }
+    setLoadingPettyCash(true);
+    try {
+      await api.post("/shift/cash-movement", {
+        shift_id: activeShift.id,
+        warehouse_id: selectedW,
+        type: pettyCashType,
+        amount: Number(pettyCashAmount),
+        reason: pettyCashReason.trim()
+      });
+      alert(`Kas ${pettyCashType === 'CASH_IN' ? 'Masuk' : 'Keluar'} senilai ${fmt(Number(pettyCashAmount))} berhasil dicatat!`);
+      setIsPettyCashModalOpen(false);
+      setPettyCashAmount("");
+      setPettyCashReason("");
+      fetchPettyCashMovements(activeShift.id);
+    } catch (err: any) {
+      alert("Gagal mencatat kas laci: " + (err.response?.data?.message || err.message));
+    } finally {
+      setLoadingPettyCash(false);
+    }
+  };
+
+  // Cross Branch Stock Checker Handlers
+  const fetchCrossBranchStock = async (keyword = "") => {
+    setLoadingCrossStock(true);
+    try {
+      const res = await api.get(`/master/cross-branch-stock?search=${encodeURIComponent(keyword)}`);
+      setCrossStockList(res.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingCrossStock(false);
+    }
+  };
+
+  // Reprint Receipt Handler
+  const handleReprintReceipt = (trx: any) => {
+    const paymentDetails = typeof trx.payment_details === 'string' ? JSON.parse(trx.payment_details || '{}') : (trx.payment_details || {});
+    setReceiptData({
+      transaction_id: trx.id,
+      date: new Date(trx.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+      kasir: trx.kasir_name || trx.cashier_name || activeShift?.cashier_name || "Kasir Toko",
+      warehouse: trx.warehouse_name || warehouses.find(w => w.id === trx.warehouse_id)?.name || "Toko",
+      items: trx.items || [
+        { name: "Transaksi Penjualan Toko", qty: 1, price: Number(trx.total_amount) }
+      ],
+      raw_total: Number(trx.total_amount) + Number(paymentDetails.discount_points || 0),
+      total: Number(trx.total_amount),
+      type: trx.type || "Penjualan",
+      payment_method: trx.payment_method || "Tunai",
+      payment_details: paymentDetails,
+      member: paymentDetails.member_name ? {
+        name: paymentDetails.member_name,
+        tier: "Member",
+        discount_points: Number(paymentDetails.discount_points || 0),
+        redeemed_points: Number(paymentDetails.redeemed_points || 0),
+        earned_points: Number(paymentDetails.earned_points || 0),
+        points_balance: Number(paymentDetails.earned_points || 0)
+      } : null
+    });
   };
 
   // Multi-Cart & Hold Transaksi Handlers
@@ -462,7 +584,21 @@ export default function Transaksi() {
                 <p className="text-slate-500 mt-1">Multi-Payment, QRIS Sandbox, Split Payment & Cash Drawer Reconciliation</p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Tombol Cek Stok Lintas Cabang */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchCrossBranchStock();
+                    setIsCrossStockModalOpen(true);
+                  }}
+                  className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Cek ketersediaan stok barang di cabang toko lain"
+                >
+                  <Eye size={16} className="text-blue-600" />
+                  <span>Cek Stok Cabang</span>
+                </button>
+
                 <div 
                   className={`flex items-center gap-2 px-3 py-2 rounded-xl shadow-sm border transition-all ${
                     activeShift 
@@ -544,21 +680,35 @@ export default function Transaksi() {
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5">
                     {activeShift 
-                      ? `Kasir: ${activeShift.cashier_name || 'Admin'} • Modal Awal Kas: ${fmt(Number(activeShift.start_cash))} • Total Omset Shift: ${fmt(Number(activeShift.total_sales))}`
+                      ? `Kasir: ${activeShift.cashier_name || 'Admin'} • Modal Awal: ${fmt(Number(activeShift.start_cash))} • Total Omset: ${fmt(Number(activeShift.total_sales))}`
                       : "Harap buka shift dan masukkan modal uang laci kasir sebelum melayani transaksi."
                     }
                   </p>
                 </div>
               </div>
 
-              <div>
+              <div className="flex items-center gap-2">
                 {activeShift ? (
-                  <button
-                    onClick={() => setIsCloseShiftModal(true)}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <ShieldCheck size={16} /> Tutup Shift (Z-Report)
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetchPettyCashMovements(activeShift.id);
+                        setIsPettyCashModalOpen(true);
+                      }}
+                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                      title="Catat kas masuk atau kas keluar laci kasir (Petty Cash)"
+                    >
+                      <Coins size={15} /> Kas Masuk/Keluar
+                    </button>
+
+                    <button
+                      onClick={() => setIsCloseShiftModal(true)}
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      <ShieldCheck size={16} /> Tutup Shift (Z-Report)
+                    </button>
+                  </>
                 ) : (
                   <button
                     onClick={() => setIsOpenShiftModal(true)}
@@ -605,12 +755,13 @@ export default function Transaksi() {
                       <th className="pb-3 font-semibold">Metode Bayar</th>
                       <th className="pb-3 font-semibold">Kasir</th>
                       <th className="pb-3 text-right font-semibold">Total Belanja</th>
+                      <th className="pb-3 text-center font-semibold pr-2">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {transaksiList.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">Belum ada riwayat transaksi.</td>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">Belum ada riwayat transaksi.</td>
                       </tr>
                     ) : transaksiList.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -637,6 +788,17 @@ export default function Transaksi() {
                         </td>
                         <td className="py-4 text-slate-600 text-sm">{t.kasir_name || "Kasir"}</td>
                         <td className="py-4 text-right font-bold text-slate-800">{fmt(t.total_amount)}</td>
+                        <td className="py-4 text-center pr-2">
+                          <button
+                            type="button"
+                            onClick={() => handleReprintReceipt(t)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1 mx-auto transition"
+                            title="Cetak ulang struk thermal"
+                          >
+                            <Printer size={13} />
+                            <span>Struk</span>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -728,13 +890,32 @@ export default function Transaksi() {
                 <span className="text-slate-500">Penjualan Tunai:</span>
                 <span className="font-semibold text-emerald-700">+{fmt(Number(activeShift.total_cash_sales))}</span>
               </div>
+              {pettyCashMovements.some(m => m.type === 'CASH_IN') && (
+                <div className="flex justify-between text-emerald-600">
+                  <span>Total Kas Masuk (Petty In):</span>
+                  <span>+{fmt(pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0))}</span>
+                </div>
+              )}
+              {pettyCashMovements.some(m => m.type === 'CASH_OUT') && (
+                <div className="flex justify-between text-red-600">
+                  <span>Total Kas Keluar (Petty Out):</span>
+                  <span>-{fmt(pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0))}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Penjualan Non-Tunai (QRIS/Debit):</span>
                 <span className="font-semibold text-blue-700">+{fmt(Number(activeShift.total_non_cash_sales))}</span>
               </div>
               <div className="border-t border-slate-200 pt-2 flex justify-between font-bold text-sm">
                 <span className="text-slate-700">Kas Seharusnya di Laci:</span>
-                <span className="text-emerald-800">{fmt(Number(activeShift.start_cash) + Number(activeShift.total_cash_sales))}</span>
+                <span className="text-emerald-800">
+                  {fmt(
+                    Number(activeShift.start_cash) + 
+                    Number(activeShift.total_cash_sales) + 
+                    pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0) -
+                    pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0)
+                  )}
+                </span>
               </div>
             </div>
 
@@ -758,11 +939,31 @@ export default function Transaksi() {
               <div className="p-3 rounded-lg border text-sm flex justify-between items-center font-medium bg-slate-50 border-slate-200">
                 <span>Selisih Rekonsiliasi:</span>
                 <span className={`font-bold ${
-                  (Number(endCashActualInput) - (Number(activeShift.start_cash) + Number(activeShift.total_cash_sales))) === 0 ? 'text-emerald-600' :
-                  (Number(endCashActualInput) - (Number(activeShift.start_cash) + Number(activeShift.total_cash_sales))) > 0 ? 'text-blue-600' : 'text-red-600'
+                  (Number(endCashActualInput) - (
+                    Number(activeShift.start_cash) + 
+                    Number(activeShift.total_cash_sales) + 
+                    pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0) -
+                    pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0)
+                  )) === 0 ? 'text-emerald-600' :
+                  (Number(endCashActualInput) - (
+                    Number(activeShift.start_cash) + 
+                    Number(activeShift.total_cash_sales) + 
+                    pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0) -
+                    pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0)
+                  )) > 0 ? 'text-blue-600' : 'text-red-600'
                 }`}>
-                  {(Number(endCashActualInput) - (Number(activeShift.start_cash) + Number(activeShift.total_cash_sales))) > 0 ? '+' : ''}
-                  {fmt(Number(endCashActualInput) - (Number(activeShift.start_cash) + Number(activeShift.total_cash_sales)))}
+                  {(Number(endCashActualInput) - (
+                    Number(activeShift.start_cash) + 
+                    Number(activeShift.total_cash_sales) + 
+                    pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0) -
+                    pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0)
+                  )) > 0 ? '+' : ''}
+                  {fmt(Number(endCashActualInput) - (
+                    Number(activeShift.start_cash) + 
+                    Number(activeShift.total_cash_sales) + 
+                    pettyCashMovements.filter(m => m.type === 'CASH_IN').reduce((sum, m) => sum + Number(m.amount), 0) -
+                    pettyCashMovements.filter(m => m.type === 'CASH_OUT').reduce((sum, m) => sum + Number(m.amount), 0)
+                  ))}
                 </span>
               </div>
             )}
@@ -916,6 +1117,14 @@ export default function Transaksi() {
                   className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50 flex items-center gap-1"
                 >
                   <Search size={13} /> {loadingMemberLookup ? "..." : "Cek Member"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickRegisterOpen(true)}
+                  className="px-3 py-1.5 bg-white hover:bg-purple-100 text-purple-700 border border-purple-300 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                  title="Daftarkan pelanggan baru langsung tanpa keluar kasir"
+                >
+                  <UserPlus size={13} /> Daftar Baru
                 </button>
               </div>
             ) : (
@@ -1582,6 +1791,268 @@ export default function Transaksi() {
               <button type="button" onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-medium flex items-center gap-2 text-sm shadow-sm">
                 <Printer size={16} /> Cetak Struk
               </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL 7: PETTY CASH / KAS MASUK & KELUAR LACI */}
+      {isPettyCashModalOpen && (
+        <Modal open={isPettyCashModalOpen} onClose={() => setIsPettyCashModalOpen(false)} title="Mutasi Kas Laci (Petty Cash)">
+          <div className="space-y-5 text-xs">
+            {/* Form Input Petty Cash */}
+            <form onSubmit={handleSavePettyCash} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800">Catat Kas Masuk / Keluar Baru</span>
+                <span className="text-[11px] text-slate-500">Shift #{activeShift?.id?.slice(0, 8)}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPettyCashType("CASH_OUT")}
+                  className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 border transition ${
+                    pettyCashType === "CASH_OUT"
+                      ? "bg-red-600 text-white border-red-600 shadow-sm"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <ArrowDownLeft size={14} /> Kas Keluar (Expense)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPettyCashType("CASH_IN")}
+                  className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 border transition ${
+                    pettyCashType === "CASH_IN"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <ArrowUpRight size={14} /> Kas Masuk (Topup/Modal)
+                </button>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Nominal Uang (Rp) *</label>
+                <input
+                  type="number"
+                  required
+                  min="1000"
+                  value={pettyCashAmount}
+                  onChange={e => setPettyCashAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Misal: 25000"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Keperluan / Keterangan Alasan *</label>
+                <input
+                  type="text"
+                  required
+                  value={pettyCashReason}
+                  onChange={e => setPettyCashReason(e.target.value)}
+                  placeholder="Misal: Beli galon air minum toko, bensin kurir, lakban"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPettyCashModalOpen(false)}
+                  className="flex-1 py-2 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingPettyCash}
+                  className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                >
+                  {loadingPettyCash ? "Menyimpan..." : "Simpan Mutasi Kas"}
+                </button>
+              </div>
+            </form>
+
+            {/* Riwayat Kas Laci Shift Aktif */}
+            <div className="space-y-2">
+              <div className="font-bold text-slate-800 flex justify-between">
+                <span>Riwayat Kas Laci Shift Ini:</span>
+                <span className="text-slate-500 font-normal">{pettyCashMovements.length} Catatan</span>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white">
+                {pettyCashMovements.length === 0 ? (
+                  <div className="py-6 text-center text-slate-400">Belum ada mutasi kas masuk/keluar pada shift ini.</div>
+                ) : (
+                  pettyCashMovements.map(m => (
+                    <div key={m.id} className="p-2.5 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            m.type === 'CASH_IN' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {m.type === 'CASH_IN' ? '+ KAS MASUK' : '- KAS KELUAR'}
+                          </span>
+                          <span className="font-semibold text-slate-800">{m.reason}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          {new Date(m.created_at).toLocaleTimeString('id-ID')} • oleh {m.cashier_name}
+                        </div>
+                      </div>
+                      <div className={`font-bold ${m.type === 'CASH_IN' ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {m.type === 'CASH_IN' ? '+' : '-'}{fmt(Number(m.amount))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL 8: QUICK REGISTER MEMBER */}
+      {isQuickRegisterOpen && (
+        <Modal open={isQuickRegisterOpen} onClose={() => setIsQuickRegisterOpen(false)} title="Registrasi Cepat Member Baru">
+          <form onSubmit={handleQuickRegisterMember} className="space-y-4 text-xs">
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-900">
+              <span className="font-bold flex items-center gap-1"><Sparkles size={14} /> Pelanggan Baru Terdeteksi</span>
+              <p className="text-[11px] mt-0.5">Daftarkan langsung agar pembeli dapat mengumpulkan poin loyalitas dari transaksi ini.</p>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Nomor WhatsApp Pelanggan</label>
+              <input
+                type="text"
+                disabled
+                value={memberPhoneInput}
+                className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-xl font-mono text-slate-700"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Nama Lengkap Pelanggan *</label>
+              <input
+                type="text"
+                required
+                autoFocus
+                placeholder="Contoh: Rina Andriani"
+                value={quickMemberName}
+                onChange={e => setQuickMemberName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tingkatan Awal (Tier)</label>
+              <select
+                value={quickMemberTier}
+                onChange={e => setQuickMemberTier(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white outline-none font-medium"
+              >
+                <option value="Silver">Silver (Member Reguler)</option>
+                <option value="Gold">Gold (Prioritas)</option>
+                <option value="Platinum">Platinum (VIP Rewards)</option>
+              </select>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsQuickRegisterOpen(false)}
+                className="flex-1 py-2.5 border border-slate-300 rounded-xl text-slate-600 hover:bg-slate-50 font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={savingQuickMember}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+              >
+                {savingQuickMember ? "Mendaftarkan..." : "Daftar & Pilih Member"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* MODAL 9: CEK STOK LINTAS CABANG (CROSS-BRANCH STOCK CHECKER) */}
+      {isCrossStockModalOpen && (
+        <Modal open={isCrossStockModalOpen} onClose={() => setIsCrossStockModalOpen(false)} title="Pemeriksaan Stok Lintas Cabang">
+          <div className="space-y-4 text-xs">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={crossStockSearch}
+                  onChange={e => {
+                    setCrossStockSearch(e.target.value);
+                    fetchCrossBranchStock(e.target.value);
+                  }}
+                  placeholder="Ketik nama produk, SKU, warna, ukuran, atau nama cabang..."
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+                <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchCrossBranchStock(crossStockSearch)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition"
+              >
+                <RefreshCw size={14} className={loadingCrossStock ? "animate-spin" : ""} />
+                Segarkan
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 font-semibold border-b border-slate-100 uppercase tracking-wider text-[11px] sticky top-0">
+                  <tr>
+                    <th className="p-3 pl-4">Produk & Varian</th>
+                    <th className="p-3">Cabang / Toko</th>
+                    <th className="p-3 text-center">Stok Tersedia</th>
+                    <th className="p-3 text-right pr-4">Harga Jual</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50 font-medium">
+                  {loadingCrossStock ? (
+                    <tr><td colSpan={4} className="py-10 text-center text-slate-400">Memeriksa ketersediaan stok seluruh cabang...</td></tr>
+                  ) : crossStockList.length === 0 ? (
+                    <tr><td colSpan={4} className="py-10 text-center text-slate-400">Tidak ada produk yang cocok dengan pencarian.</td></tr>
+                  ) : (
+                    crossStockList.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition">
+                        <td className="p-3 pl-4">
+                          <div className="font-bold text-slate-800">{item.product_name}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{item.sku} • {item.color} • {item.size}</div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                            <Building size={13} className="text-slate-400" />
+                            <span>{item.warehouse_name}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            Number(item.stock_qty) <= 0 
+                              ? 'bg-red-100 text-red-700 border border-red-200' 
+                              : Number(item.stock_qty) < 10
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {item.stock_qty} pcs
+                          </span>
+                        </td>
+                        <td className="p-3 text-right pr-4 font-bold text-slate-800">
+                          {fmt(Number(item.price_sell))}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </Modal>

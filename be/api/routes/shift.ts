@@ -89,6 +89,79 @@ router.post("/open", async (req: Request, res: Response) => {
   }
 });
 
+// POST cash movement (Petty Cash / Cash In / Cash Out)
+router.post("/cash-movement", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id, id: user_id } = req.user as any;
+    const { shift_id, warehouse_id, type, amount, reason } = req.body;
+
+    if (!shift_id || !type || !amount || Number(amount) <= 0 || !reason) {
+      return res.status(400).json({ message: "Shift ID, tipe (CASH_IN/CASH_OUT), nominal valid, dan alasan wajib diisi" });
+    }
+
+    // Verify shift is OPEN
+    const shiftCheck = await pool.query(
+      "SELECT id, warehouse_id FROM cashier_shifts WHERE id = $1 AND tenant_id = $2 AND status = 'OPEN'",
+      [shift_id, tenant_id]
+    );
+
+    if (shiftCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Shift aktif tidak ditemukan" });
+    }
+
+    const wId = warehouse_id || shiftCheck.rows[0].warehouse_id;
+
+    const result = await pool.query(`
+      INSERT INTO cash_movements (tenant_id, warehouse_id, shift_id, user_id, type, amount, reason, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      RETURNING *
+    `, [tenant_id, wId, shift_id, user_id, type, Number(amount), reason.trim()]);
+
+    logAudit({
+      tenantId: tenant_id,
+      userId: user_id,
+      action: type === 'CASH_IN' ? 'CASH_DRAWER_IN' : 'CASH_DRAWER_OUT',
+      module: "SHIFT",
+      details: {
+        shift_id,
+        amount: Number(amount),
+        reason: reason.trim()
+      },
+      ipAddress: req.ip || "127.0.0.1"
+    });
+
+    res.status(201).json({ message: `Kas ${type === 'CASH_IN' ? 'masuk' : 'keluar'} berhasil dicatat`, movement: result.rows[0] });
+  } catch (err: any) {
+    console.error("POST /cash-movement error:", err);
+    res.status(500).json({ message: "Gagal mencatat mutasi kas laci" });
+  }
+});
+
+// GET cash movements for a shift
+router.get("/cash-movements", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+    const { shift_id } = req.query;
+
+    if (!shift_id) {
+      return res.status(400).json({ message: "Shift ID wajib disertakan" });
+    }
+
+    const result = await pool.query(`
+      SELECT cm.*, u.name as cashier_name
+      FROM cash_movements cm
+      JOIN users u ON cm.user_id = u.id
+      WHERE cm.tenant_id = $1 AND cm.shift_id = $2
+      ORDER BY cm.created_at ASC
+    `, [tenant_id, shift_id]);
+
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error("GET /cash-movements error:", err);
+    res.status(500).json({ message: "Gagal memuat mutasi kas laci" });
+  }
+});
+
 // POST close shift (Z-Report)
 router.post("/close", async (req: Request, res: Response) => {
   const client = await pool.connect();
@@ -119,7 +192,19 @@ router.post("/close", async (req: Request, res: Response) => {
     const totalSales = Number(shift.total_sales) || 0;
     const actualCash = Number(end_cash_actual);
 
-    const expectedCash = startCash + totalCashSales;
+    // Calculate Cash Movements (Petty cash In & Out)
+    const movRes = await client.query(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN type = 'CASH_IN' THEN amount ELSE 0 END), 0) as total_in,
+        COALESCE(SUM(CASE WHEN type = 'CASH_OUT' THEN amount ELSE 0 END), 0) as total_out
+      FROM cash_movements
+      WHERE shift_id = $1
+    `, [shift_id]);
+
+    const totalCashIn = Number(movRes.rows[0]?.total_in || 0);
+    const totalCashOut = Number(movRes.rows[0]?.total_out || 0);
+
+    const expectedCash = startCash + totalCashSales + totalCashIn - totalCashOut;
     const difference = actualCash - expectedCash;
 
     const updateRes = await client.query(`
@@ -150,6 +235,8 @@ router.post("/close", async (req: Request, res: Response) => {
         expected_cash: expectedCash,
         end_cash_actual: actualCash,
         difference: difference,
+        total_cash_in: totalCashIn,
+        total_cash_out: totalCashOut,
         status: closedShift.status
       },
       ipAddress: req.ip || "127.0.0.1"
@@ -165,6 +252,8 @@ router.post("/close", async (req: Request, res: Response) => {
         total_cash_sales: totalCashSales,
         total_non_cash_sales: totalNonCashSales,
         total_sales: totalSales,
+        total_cash_in: totalCashIn,
+        total_cash_out: totalCashOut,
         expected_cash: expectedCash,
         end_cash_actual: actualCash,
         difference: difference,

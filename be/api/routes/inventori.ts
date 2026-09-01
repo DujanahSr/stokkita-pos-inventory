@@ -273,4 +273,46 @@ router.post("/opname", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/master/cross-branch-stock - Cashier Stock Checker across all branches (Read-Only, HPP Hidden)
+router.get("/cross-branch-stock", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+    const { search } = req.query;
+
+    let query = `
+      SELECT 
+        p.id as product_id,
+        p.name as product_name,
+        p.category,
+        v.id as variant_id,
+        v.sku,
+        v.size,
+        v.color,
+        v.price_sell,
+        w.id as warehouse_id,
+        w.name as warehouse_name,
+        COALESCE(i.qty, 0) as stock_qty
+      FROM products p
+      JOIN variants v ON p.id = v.product_id
+      CROSS JOIN warehouses w
+      LEFT JOIN inventory i ON v.id = i.variant_id AND w.id = i.warehouse_id
+      WHERE p.tenant_id = $1 AND w.tenant_id = $1
+    `;
+    const params: any[] = [tenant_id];
+
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND (p.name ILIKE $${params.length} OR v.sku ILIKE $${params.length} OR v.color ILIKE $${params.length} OR v.size ILIKE $${params.length} OR w.name ILIKE $${params.length})`;
+    }
+
+    query += ` ORDER BY p.name ASC, v.sku ASC, w.name ASC`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error("GET /cross-branch-stock error:", err);
+    res.status(500).json({ message: "Gagal mengambil data stok lintas cabang" });
+  }
+});
+
 export default router;
