@@ -13,6 +13,8 @@ import Users from "./pages/Users";
 import AuditLog from "./pages/AuditLog";
 import Members from "./pages/Members";
 import Register from "./pages/Register";
+import Vouchers from "./pages/Vouchers";
+import Settings from "./pages/Settings";
 
 import { Toaster } from "sonner";
 
@@ -30,6 +32,8 @@ export default function App() {
           <Route path="/transaksi" element={<ProtectedRoute><Transaksi /></ProtectedRoute>} />
           <Route path="/reorder" element={<AdminRoute><Reorder /></AdminRoute>} />
           <Route path="/members" element={<AdminRoute><Members /></AdminRoute>} />
+          <Route path="/vouchers" element={<AdminRoute><Vouchers /></AdminRoute>} />
+          <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
           <Route path="/laporan" element={<AdminRoute><Laporan /></AdminRoute>} />
           <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
           <Route path="/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />

@@ -10,7 +10,8 @@ import {
   AlertCircle, ShieldCheck, DollarSign, ArrowRight, Lock,
   Pause, Play, ShoppingCart, Bookmark,
   Crown, Gift, Sparkles, UserCheck, Search, X, Phone,
-  Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw, Package
+  Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw, Package,
+  Ticket, Percent, Keyboard, Sliders
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -123,9 +124,29 @@ export default function Transaksi() {
   const [catalogCategory, setCatalogCategory] = useState("Semua");
   const [historySearch, setHistorySearch] = useState("");
 
+  // Manual Discount & Voucher Promo States
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [manualDiscountType, setManualDiscountType] = useState<"PERCENT" | "NOMINAL">("PERCENT");
+  const [manualDiscountValue, setManualDiscountValue] = useState<number | "">("");
+  const [manualDiscountReason, setManualDiscountReason] = useState("");
+  const [voucherInput, setVoucherInput] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [loadingVoucher, setLoadingVoucher] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+
   useEffect(() => {
     fetchWarehouses();
+    fetchStoreSettings();
   }, []);
+
+  const fetchStoreSettings = async () => {
+    try {
+      const res = await api.get("/settings");
+      if (res.data) setStoreSettings(res.data);
+    } catch (e) {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     if (selectedW) {
@@ -317,12 +338,107 @@ export default function Transaksi() {
     setCart(cart.map(c => c.variant_id === vid ? { ...c, qty: Math.max(1, qty) } : c));
   };
 
-  // Member & Cart Total Calculations
+  // Member, Discounts & Cart Total Calculations
   const rawCartTotal = cart.reduce((sum, c) => sum + c.qty * c.price, 0);
   const maxRedeemablePoints = selectedMember ? Math.min(Number(selectedMember.points) || 0, Math.floor(rawCartTotal / 100)) : 0;
   const pointsDiscount = (isRedeemingPoints && selectedMember) ? (maxRedeemablePoints * 100) : 0;
-  const cartTotal = Math.max(0, rawCartTotal - pointsDiscount);
+  
+  // Manual discount calculation
+  let manualDiscountAmount = 0;
+  if (manualDiscountValue && Number(manualDiscountValue) > 0) {
+    if (manualDiscountType === "PERCENT") {
+      manualDiscountAmount = Math.round((rawCartTotal * Number(manualDiscountValue)) / 100);
+    } else {
+      manualDiscountAmount = Math.min(rawCartTotal, Number(manualDiscountValue));
+    }
+  }
+
+  // Voucher discount calculation
+  const voucherDiscountAmount = appliedVoucher ? Number(appliedVoucher.discount_amount || 0) : 0;
+
+  const totalDiscount = pointsDiscount + manualDiscountAmount + voucherDiscountAmount;
+  const cartTotal = Math.max(0, rawCartTotal - totalDiscount);
   const potentialPointsEarned = tipe === "Penjualan" ? Math.floor(cartTotal / 10000) : 0;
+
+  // Keyboard Hotkeys for Cashier Speed
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input or textarea unless it's a dedicated Function key
+      const isInputFocused = ["INPUT", "TEXTAREA", "SELECT"].includes((document.activeElement?.tagName || ""));
+
+      if (e.key === "F1") {
+        e.preventDefault();
+        barcodeInputRef.current?.focus();
+        toast.info("Fokus ke Barcode Scanner (F1)");
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        setIsDiscountModalOpen(prev => !prev);
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        if (cart.length > 0) {
+          setPaymentMethod("Tunai");
+          setCashReceived(cartTotal);
+          toast.success(`Mode Tunai: Uang Pas (${fmt(cartTotal)}) dipilih (F4)`);
+        } else {
+          toast.warning("Keranjang masih kosong!");
+        }
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        if (cart.length > 0) {
+          handleOpenHoldModal();
+        } else {
+          toast.warning("Tidak ada transaksi untuk diparkir!");
+        }
+      } else if (e.key === "Escape") {
+        if (isDiscountModalOpen) {
+          setIsDiscountModalOpen(false);
+        } else if (isModalOpen) {
+          setIsModalOpen(false);
+        } else if (isHeldListModalOpen) {
+          setIsHeldListModalOpen(false);
+        } else if (isCrossStockModalOpen) {
+          setIsCrossStockModalOpen(false);
+        } else if (!isInputFocused && cart.length > 0) {
+          if (confirm("Kosongkan keranjang belanja? (Esc)")) {
+            setCart([]);
+            toast.info("Keranjang belanja dikosongkan");
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cart, cartTotal, isDiscountModalOpen, isModalOpen, isHeldListModalOpen, isCrossStockModalOpen]);
+
+  // Apply Voucher Code
+  const handleApplyVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voucherInput.trim()) {
+      toast.warning("Masukkan kode voucher terlebih dahulu!");
+      return;
+    }
+    setLoadingVoucher(true);
+    try {
+      const res = await api.post("/vouchers/validate", {
+        code: voucherInput.trim(),
+        cart_total: rawCartTotal - pointsDiscount - manualDiscountAmount
+      });
+      setAppliedVoucher(res.data);
+      toast.success(res.data.message || `Voucher "${res.data.code}" berhasil diterapkan!`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Kode voucher tidak valid");
+      setAppliedVoucher(null);
+    } finally {
+      setLoadingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherInput("");
+    toast.info("Voucher promo dilepas");
+  };
 
   const handleLookupMember = async () => {
     if (!memberPhoneInput.trim()) return;
@@ -633,13 +749,21 @@ export default function Transaksi() {
         payment_method: effectivePaymentMethod,
         payment_details: {
           ...paymentDetailsPayload,
-          return_reason: tipe === "Retur" ? returnReasonFormatted : undefined
+          return_reason: tipe === "Retur" ? returnReasonFormatted : undefined,
+          discount_manual: manualDiscountAmount,
+          discount_manual_reason: manualDiscountReason,
+          discount_voucher: voucherDiscountAmount,
+          voucher_code: appliedVoucher?.code || null
         },
         return_reason: tipe === "Retur" ? returnReasonFormatted : undefined,
         member_id: selectedMember?.id || null,
         member_name: selectedMember?.name || null,
         discount_points: pointsDiscount,
-        redeemed_points: isRedeemingPoints ? maxRedeemablePoints : 0
+        redeemed_points: isRedeemingPoints ? maxRedeemablePoints : 0,
+        discount_manual: manualDiscountAmount,
+        discount_manual_reason: manualDiscountReason,
+        discount_voucher: voucherDiscountAmount,
+        voucher_code: appliedVoucher?.code || null
       });
 
       setIsModalOpen(false);
@@ -655,8 +779,21 @@ export default function Transaksi() {
         total: cartTotal,
         type: tipe,
         payment_method: effectivePaymentMethod,
-        payment_details: paymentDetailsPayload,
+        payment_details: {
+          ...paymentDetailsPayload,
+          discount_manual: manualDiscountAmount,
+          discount_voucher: voucherDiscountAmount,
+          voucher_code: appliedVoucher?.code || null
+        },
         return_reason: tipe === "Retur" ? returnReasonFormatted : null,
+        discounts: {
+          points: pointsDiscount,
+          manual: manualDiscountAmount,
+          manual_reason: manualDiscountReason,
+          voucher: voucherDiscountAmount,
+          voucher_code: appliedVoucher?.code || null,
+          total: totalDiscount
+        },
         member: selectedMember ? {
           name: selectedMember.name,
           phone: selectedMember.phone,
@@ -675,6 +812,10 @@ export default function Transaksi() {
       setSelectedMember(null);
       setMemberPhoneInput("");
       setIsRedeemingPoints(false);
+      setManualDiscountValue("");
+      setManualDiscountReason("");
+      setAppliedVoucher(null);
+      setVoucherInput("");
       setCashReceived("");
       setCardLast4("");
       setApprovalCode("");
@@ -845,6 +986,21 @@ export default function Transaksi() {
                 ))}
               </select>
             </div>
+          </div>
+        </div>
+
+        {/* KEYBOARD SHORTCUTS INFO STRIP */}
+        <div className="bg-slate-800 text-slate-300 px-4 py-1 text-[11px] font-mono flex flex-wrap items-center justify-between gap-2 shadow-inner flex-shrink-0">
+          <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <Keyboard size={13} />
+            <span>Hotkeys Kasir:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-[10px]">
+            <span className="flex items-center gap-1"><kbd className="bg-slate-700 text-white px-1.5 py-0.5 rounded border border-slate-600 font-bold">F1</kbd> Scan Barcode</span>
+            <span className="flex items-center gap-1"><kbd className="bg-slate-700 text-white px-1.5 py-0.5 rounded border border-slate-600 font-bold">F2</kbd> Diskon & Kupon</span>
+            <span className="flex items-center gap-1"><kbd className="bg-slate-700 text-white px-1.5 py-0.5 rounded border border-slate-600 font-bold">F4</kbd> Bayar Uang Pas</span>
+            <span className="flex items-center gap-1"><kbd className="bg-slate-700 text-white px-1.5 py-0.5 rounded border border-slate-600 font-bold">F8</kbd> Parkir Transaksi</span>
+            <span className="flex items-center gap-1"><kbd className="bg-slate-700 text-white px-1.5 py-0.5 rounded border border-slate-600 font-bold">Esc</kbd> Reset / Batal</span>
           </div>
         </div>
 
@@ -1184,7 +1340,52 @@ export default function Transaksi() {
                 {/* Checkout & Payment Bottom Section */}
                 <div className="p-3 border-t border-slate-200 bg-slate-50/80 space-y-2.5">
                   
-                  {/* Totals & Discounts */}
+                  {/* Diskon & Kupon Promo Trigger Bar */}
+                  <div className="flex items-center justify-between gap-1.5 bg-emerald-50/80 border border-emerald-200 p-2 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setIsDiscountModalOpen(true)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 transition"
+                      title="Tambah diskon manual atau masukkan kupon voucher (Tekan F2)"
+                    >
+                      <Ticket size={14} className="text-emerald-600" />
+                      <span>+ Diskon / Kupon Promo</span>
+                      <span className="text-[10px] bg-emerald-200/70 text-emerald-900 px-1 rounded font-mono">F2</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      {manualDiscountAmount > 0 && (
+                        <span className="text-[10px] font-bold bg-white text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                          -{fmt(manualDiscountAmount)}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setManualDiscountValue("");
+                              setManualDiscountReason("");
+                            }}
+                            className="text-slate-400 hover:text-red-500 font-bold ml-0.5"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )}
+
+                      {appliedVoucher && (
+                        <span className="text-[10px] font-bold bg-white text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                          {appliedVoucher.code} (-{fmt(appliedVoucher.discount_amount)})
+                          <button
+                            type="button"
+                            onClick={handleRemoveVoucher}
+                            className="text-slate-400 hover:text-red-500 font-bold ml-0.5"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Totals & Discounts Breakdown */}
                   <div className="space-y-1 text-xs">
                     {pointsDiscount > 0 && (
                       <div className="flex justify-between text-emerald-700 font-medium">
@@ -1192,8 +1393,20 @@ export default function Transaksi() {
                         <span>-{fmt(pointsDiscount)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-baseline font-black">
-                      <span className="text-slate-700 text-xs uppercase tracking-wider">Total Belanja:</span>
+                    {manualDiscountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-700 font-medium">
+                        <span>Diskon Manual {manualDiscountReason ? `(${manualDiscountReason})` : ''}:</span>
+                        <span>-{fmt(manualDiscountAmount)}</span>
+                      </div>
+                    )}
+                    {voucherDiscountAmount > 0 && (
+                      <div className="flex justify-between text-blue-700 font-medium">
+                        <span>Voucher Promo ({appliedVoucher?.code}):</span>
+                        <span>-{fmt(voucherDiscountAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-baseline font-black pt-0.5 border-t border-slate-200">
+                      <span className="text-slate-700 text-xs uppercase tracking-wider">Total Akhir:</span>
                       <span className="text-emerald-700 text-lg font-black">{fmt(cartTotal)}</span>
                     </div>
                   </div>
@@ -2735,10 +2948,14 @@ export default function Transaksi() {
         <Modal open={!!receiptData} onClose={() => setReceiptData(null)} title="Struk Pembayaran">
           <div className="flex flex-col items-center">
             <div id="print-receipt" className="bg-white p-5 w-full max-w-sm text-xs border border-slate-300 rounded-lg shadow-sm font-mono space-y-3">
-              <div className="text-center font-bold text-sm">
-                <div>{receiptData.warehouse.toUpperCase()}</div>
-                <div className="text-[10px] font-normal text-slate-500 mt-0.5">
-                  {receiptData.type === "Retur" ? "BUKTI RETUR & REFUND DANA" : "StokKita POS Retail"}
+              {/* Header Toko Dinamis dari Pengaturan */}
+              <div className="text-center font-bold text-sm space-y-0.5">
+                <div className="text-base uppercase tracking-wide">{storeSettings?.store_name || receiptData.warehouse.toUpperCase()}</div>
+                {storeSettings?.slogan && <div className="text-[10px] font-normal text-slate-500">{storeSettings.slogan}</div>}
+                {storeSettings?.address && <div className="text-[10px] font-normal text-slate-600">{storeSettings.address}</div>}
+                {storeSettings?.phone && <div className="text-[10px] font-normal text-slate-600">Telp: {storeSettings.phone}</div>}
+                <div className="text-[10px] font-bold text-emerald-800 pt-1">
+                  {receiptData.type === "Retur" ? "BUKTI RETUR & REFUND DANA" : (storeSettings?.receipt_header || "StokKita POS Retail")}
                 </div>
               </div>
 
@@ -2748,6 +2965,7 @@ export default function Transaksi() {
                 <div className="flex justify-between"><span>No Trx:</span><span>{receiptData.transaction_id.slice(0, 12)}</span></div>
                 <div className="flex justify-between"><span>Waktu:</span><span>{receiptData.date}</span></div>
                 <div className="flex justify-between"><span>Kasir:</span><span>{receiptData.kasir}</span></div>
+                <div className="flex justify-between"><span>Cabang:</span><span>{receiptData.warehouse}</span></div>
                 <div className="flex justify-between">
                   <span>Tipe Transaksi:</span>
                   <span className={`font-bold ${receiptData.type === 'Retur' ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -2780,18 +2998,32 @@ export default function Transaksi() {
               <div className="border-t border-dashed my-2"></div>
 
               <div className="space-y-1 text-xs">
+                {/* Rincian Potongan Diskon */}
+                {receiptData.discounts?.points > 0 && (
+                  <div className="flex justify-between text-purple-700">
+                    <span>Diskon Loyalty Poin:</span>
+                    <span>-{fmt(receiptData.discounts.points)}</span>
+                  </div>
+                )}
+                {receiptData.discounts?.manual > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Diskon Manual {receiptData.discounts.manual_reason ? `(${receiptData.discounts.manual_reason})` : ''}:</span>
+                    <span>-{fmt(receiptData.discounts.manual)}</span>
+                  </div>
+                )}
+                {receiptData.discounts?.voucher > 0 && (
+                  <div className="flex justify-between text-blue-700">
+                    <span>Voucher ({receiptData.discounts.voucher_code}):</span>
+                    <span>-{fmt(receiptData.discounts.voucher)}</span>
+                  </div>
+                )}
+
                 {receiptData.member && (
-                  <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-0.5 mb-1 font-sans">
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-0.5 my-1 font-sans">
                     <div className="flex justify-between font-bold text-slate-800">
                       <span>👑 Member: {receiptData.member.name}</span>
                       <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-semibold">{receiptData.member.tier}</span>
                     </div>
-                    {receiptData.member.discount_points > 0 && (
-                      <div className="flex justify-between text-purple-700 font-semibold">
-                        <span>Diskon Poin ({receiptData.member.points_redeemed} Poin):</span>
-                        <span>-{fmt(receiptData.member.discount_points)}</span>
-                      </div>
-                    )}
                     <div className="flex justify-between text-emerald-700">
                       <span>Poin Didapat:</span>
                       <span>+{receiptData.member.earned_points} Poin</span>
@@ -2803,7 +3035,7 @@ export default function Transaksi() {
                   </div>
                 )}
 
-                <div className="flex justify-between font-bold text-sm text-slate-900">
+                <div className="flex justify-between font-bold text-sm text-slate-900 pt-1 border-t border-slate-200">
                   <span>{receiptData.type === 'Retur' ? 'TOTAL DANA DIREFUND' : 'TOTAL PEMBAYARAN'}</span>
                   <span className={receiptData.type === 'Retur' ? 'text-red-600' : 'text-slate-900'}>{fmt(receiptData.total)}</span>
                 </div>
@@ -2854,9 +3086,16 @@ export default function Transaksi() {
 
               <div className="border-t border-dashed my-2"></div>
 
-              <div className="text-center text-[10px] text-slate-500 pt-2">
-                Terima kasih atas kunjungan Anda!<br/>
-                Barang yang sudah dibeli dapat ditukar max 3 hari dengan struk ini.
+              {/* Footer Toko Dinamis dari Pengaturan */}
+              <div className="text-center text-[10px] text-slate-600 pt-2 space-y-1">
+                <p className="whitespace-pre-line leading-relaxed">
+                  {storeSettings?.receipt_footer || "Terima kasih atas kunjungan Anda!\nBarang yang sudah dibeli dapat ditukar max 3 hari dengan struk ini."}
+                </p>
+                {storeSettings?.instagram && (
+                  <p className="font-bold text-slate-800">
+                    Follow IG: {storeSettings.instagram}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2864,6 +3103,129 @@ export default function Transaksi() {
               <button type="button" onClick={() => setReceiptData(null)} className="px-5 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-medium text-sm">Tutup</button>
               <button type="button" onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-medium flex items-center gap-2 text-sm shadow-sm">
                 <Printer size={16} /> Cetak Struk
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL DISKON MANUAL & KUPON PROMO (HOTKEY F2) */}
+      {isDiscountModalOpen && (
+        <Modal open={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} title="Diskon Manual & Kupon Promo (F2)">
+          <div className="space-y-5 font-sans">
+            
+            {/* SECTION 1: KODE VOUCHER PROMO */}
+            <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Ticket className="text-blue-600" size={18} />
+                <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wide">Punya Kupon Diskon / Voucher?</h3>
+              </div>
+
+              <form onSubmit={handleApplyVoucher} className="flex gap-2">
+                <input
+                  type="text"
+                  value={voucherInput}
+                  onChange={e => setVoucherInput(e.target.value.toUpperCase())}
+                  placeholder="Ketik kode kupon (mis: PROMO10)..."
+                  className="flex-1 px-3 py-2 text-xs bg-white border border-blue-300 rounded-xl uppercase font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={loadingVoucher || !voucherInput.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 transition"
+                >
+                  {loadingVoucher ? "Mengecek..." : "Terapkan"}
+                </button>
+              </form>
+
+              {appliedVoucher && (
+                <div className="bg-white p-2.5 rounded-xl border border-blue-200 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-bold text-blue-900">{appliedVoucher.code}</span>
+                    <p className="text-[11px] text-emerald-700 font-semibold">Hemat {fmt(appliedVoucher.discount_amount)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveVoucher}
+                    className="text-xs text-red-600 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2: DISKON MANUAL TOKO (Persen / Nominal) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sliders className="text-slate-700" size={18} />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Diskon Khusus Toko / Display</h3>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold text-center">
+                <button
+                  type="button"
+                  onClick={() => setManualDiscountType("PERCENT")}
+                  className={`py-1.5 rounded-lg transition ${manualDiscountType === 'PERCENT' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  Persentase (%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManualDiscountType("NOMINAL")}
+                  className={`py-1.5 rounded-lg transition ${manualDiscountType === 'NOMINAL' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  Nominal Tetap (Rp)
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  {manualDiscountType === 'PERCENT' ? 'Persentase Diskon (%)' : 'Potongan Nominal (Rp)'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={manualDiscountType === 'PERCENT' ? 100 : rawCartTotal}
+                  value={manualDiscountValue}
+                  onChange={e => setManualDiscountValue(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder={manualDiscountType === 'PERCENT' ? 'Misal: 10%' : 'Misal: 50000'}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl font-bold outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Alasan Diskon (Opsional)</label>
+                <input
+                  type="text"
+                  value={manualDiscountReason}
+                  onChange={e => setManualDiscountReason(e.target.value)}
+                  placeholder="Misal: Promo Opening, Diskon Cuci Gudang, Cacat Jahitan"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setManualDiscountValue("");
+                  setManualDiscountReason("");
+                  setAppliedVoucher(null);
+                  setVoucherInput("");
+                  setIsDiscountModalOpen(false);
+                }}
+                className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold"
+              >
+                Reset Semua
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDiscountModalOpen(false)}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+              >
+                Simpan & Pasang Diskon
               </button>
             </div>
           </div>

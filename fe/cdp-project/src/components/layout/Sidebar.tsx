@@ -17,6 +17,8 @@ import {
   Tag,
   ShieldCheck,
   Crown,
+  Ticket,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 const allNavItems = [
@@ -26,11 +28,13 @@ const allNavItems = [
   { to: "/transaksi", icon: ArrowLeftRight, label: "Transaksi", adminOnly: false },
   { to: "/reorder", icon: ShoppingCart, label: "Purchase Order", adminOnly: true },
   { to: "/members", icon: Crown, label: "Pelanggan & Member", adminOnly: true },
+  { to: "/vouchers", icon: Ticket, label: "Kupon Promo", adminOnly: true },
   { to: "/laporan", icon: BarChart3, label: "Laporan", adminOnly: true },
 ];
 
 const adminItems = [
   { to: "/users", icon: UsersIcon, label: "User / Kasir" },
+  { to: "/settings", icon: SettingsIcon, label: "Pengaturan Toko" },
   { to: "/audit", icon: ShieldCheck, label: "Audit Log & Keamanan" },
 ];
 

@@ -1,7 +1,11 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { clearCache } from "../redisClient.js";
+// @ts-ignore
+import ExcelJS from "exceljs";
+import multer from "multer";
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const router = express.Router();
 
 // GET /api/produk - List all products with their variants
@@ -443,6 +447,233 @@ router.delete("/variants/:variant_id", async (req: Request, res: Response) => {
     await client.query("ROLLBACK");
     console.error("DELETE /api/produk/variants error:", err);
     res.status(400).json({ message: err.message || "Gagal menghapus varian" });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/produk/export/excel - Export Master Produk to Excel
+router.get("/export/excel", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+
+    const result = await pool.query(`
+      SELECT 
+        p.name as product_name,
+        p.category,
+        v.sku,
+        v.size,
+        v.color,
+        v.price_buy,
+        v.price_sell,
+        v.rop,
+        v.eoq,
+        COALESCE(SUM(i.qty), 0) as total_stock
+      FROM products p
+      JOIN variants v ON p.id = v.product_id
+      LEFT JOIN inventory i ON v.id = i.variant_id
+      WHERE p.tenant_id = $1
+      GROUP BY p.id, p.name, p.category, v.id, v.sku, v.size, v.color, v.price_buy, v.price_sell, v.rop, v.eoq
+      ORDER BY p.name ASC, v.sku ASC
+    `, [tenant_id]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'StokKita System';
+    workbook.created = new Date();
+
+    const ws = workbook.addWorksheet('Master Produk');
+
+    // Title
+    ws.mergeCells('A1', 'J1');
+    ws.getCell('A1').value = 'DATA MASTER PRODUK & SKU - STOKKITA PLATFORM';
+    ws.getCell('A1').font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 35;
+
+    ws.mergeCells('A2', 'J2');
+    ws.getCell('A2').value = `Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}`;
+    ws.getCell('A2').alignment = { horizontal: 'center' };
+
+    // Header Table
+    const headers = [
+      'No', 'Nama Produk', 'Kategori', 'Barcode / SKU', 
+      'Ukuran', 'Warna', 'Harga Beli (HPP)', 'Harga Jual', 
+      'ROP (Safety)', 'Total Stok'
+    ];
+    ws.getRow(4).values = headers;
+    ws.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws.getRow(4).height = 25;
+
+    ws.columns = [
+      { key: 'no', width: 5 },
+      { key: 'product_name', width: 35 },
+      { key: 'category', width: 18 },
+      { key: 'sku', width: 22 },
+      { key: 'size', width: 10 },
+      { key: 'color', width: 15 },
+      { key: 'price_buy', width: 20 },
+      { key: 'price_sell', width: 20 },
+      { key: 'rop', width: 15 },
+      { key: 'total_stock', width: 15 },
+    ];
+
+    result.rows.forEach((row: any, idx: number) => {
+      const r = ws.addRow({
+        no: idx + 1,
+        product_name: row.product_name,
+        category: row.category || 'Sepatu',
+        sku: row.sku,
+        size: row.size || '-',
+        color: row.color || '-',
+        price_buy: Number(row.price_buy || 0),
+        price_sell: Number(row.price_sell || 0),
+        rop: Number(row.rop || 10),
+        total_stock: Number(row.total_stock || 0)
+      });
+
+      r.getCell('price_buy').numFmt = '"Rp "#,##0';
+      r.getCell('price_sell').numFmt = '"Rp "#,##0';
+      r.getCell('total_stock').alignment = { horizontal: 'center' };
+      r.getCell('size').alignment = { horizontal: 'center' };
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="master_produk_${Date.now()}.xlsx"`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err: any) {
+    console.error("GET /api/produk/export/excel error:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Gagal mengekspor data produk ke Excel" });
+  }
+});
+
+// POST /api/produk/import/excel - Bulk Import Produk & Varian from Excel
+router.post("/import/excel", upload.single("file"), async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const { tenant_id } = req.user as any;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "File Excel (.xlsx) wajib diupload!" });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer as any);
+
+    const ws = workbook.worksheets[0];
+    if (!ws) {
+      return res.status(400).json({ message: "Worksheet Excel kosong atau tidak valid" });
+    }
+
+    // Find default warehouse for initial stock
+    const whRes = await client.query(
+      "SELECT id FROM warehouses WHERE tenant_id = $1 ORDER BY created_at ASC LIMIT 1",
+      [tenant_id]
+    );
+    const defaultWarehouseId = whRes.rows[0]?.id;
+
+    await client.query("BEGIN");
+
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    // Start from row 5 (assuming header is row 4, or detect from row 2)
+    let startRow = 2;
+    for (let r = 1; r <= 10; r++) {
+      const firstCell = ws.getRow(r).getCell(1).value?.toString() || '';
+      const secondCell = ws.getRow(r).getCell(2).value?.toString() || '';
+      if (firstCell.toLowerCase().includes('no') || secondCell.toLowerCase().includes('nama')) {
+        startRow = r + 1;
+        break;
+      }
+    }
+
+    for (let rowNumber = startRow; rowNumber <= ws.rowCount; rowNumber++) {
+      const row = ws.getRow(rowNumber);
+      const productName = row.getCell(2).value?.toString()?.trim();
+      const category = row.getCell(3).value?.toString()?.trim() || "Sepatu";
+      const sku = row.getCell(4).value?.toString()?.trim();
+      const size = row.getCell(5).value?.toString()?.trim() || "40";
+      const color = row.getCell(6).value?.toString()?.trim() || "Hitam";
+      const priceBuy = Number(row.getCell(7).value) || 0;
+      const priceSell = Number(row.getCell(8).value) || 0;
+      const rop = Number(row.getCell(9).value) || 10;
+      const initialStock = Number(row.getCell(10).value) || 0;
+
+      if (!productName || !sku) {
+        skippedCount++;
+        continue;
+      }
+
+      // 1. Get or Create Product
+      let productRes = await client.query(
+        "SELECT id FROM products WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1",
+        [tenant_id, productName]
+      );
+
+      let productId: string;
+      if (productRes.rows.length === 0) {
+        const newProd = await client.query(
+          "INSERT INTO products (tenant_id, name, category) VALUES ($1, $2, $3) RETURNING id",
+          [tenant_id, productName, category]
+        );
+        productId = newProd.rows[0].id;
+      } else {
+        productId = productRes.rows[0].id;
+      }
+
+      // 2. Check if variant SKU already exists
+      const vCheck = await client.query(
+        "SELECT id FROM variants WHERE sku = $1",
+        [sku]
+      );
+
+      let variantId: string;
+      if (vCheck.rows.length === 0) {
+        const newV = await client.query(`
+          INSERT INTO variants (product_id, sku, size, color, price_buy, price_sell, rop, eoq)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING id
+        `, [productId, sku, size, color, priceBuy, priceSell, rop, 50]);
+        variantId = newV.rows[0].id;
+
+        // 3. Set Initial Stock in Default Warehouse if available
+        if (defaultWarehouseId && initialStock > 0) {
+          await client.query(`
+            INSERT INTO inventory (warehouse_id, variant_id, qty)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (warehouse_id, variant_id) DO UPDATE
+            SET qty = inventory.qty + EXCLUDED.qty
+          `, [defaultWarehouseId, variantId, initialStock]);
+        }
+
+        importedCount++;
+      } else {
+        skippedCount++;
+      }
+    }
+
+    await client.query("COMMIT");
+    await clearCache("inventory:*");
+
+    res.json({
+      message: `Impor data selesai! Berhasil menambahkan ${importedCount} varian produk baru (${skippedCount} baris diskip/sudah ada).`,
+      imported_count: importedCount,
+      skipped_count: skippedCount
+    });
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    console.error("POST /api/produk/import/excel error:", err);
+    res.status(500).json({ message: "Gagal mengimpor file Excel: " + (err.message || "Format data tidak sesuai") });
   } finally {
     client.release();
   }

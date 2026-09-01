@@ -5,7 +5,7 @@ import Modal from "../components/ui/Modal";
 import api from "../api/axios";
 import { 
   Users, Award, Gift, Search, Plus, Phone, 
-  Mail, Edit3, Trash2, Crown, Sparkles, TrendingUp 
+  Mail, Edit3, Trash2, Crown, Sparkles, TrendingUp, Download 
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ export default function Members() {
   const [members, setMembers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [form, setForm] = useState({
@@ -90,6 +91,27 @@ export default function Members() {
     }
   };
 
+  const handleExportExcel = async () => {
+    setDownloading(true);
+    try {
+      const res = await api.get("/members/export/excel", { responseType: "blob" });
+      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Database_Member_${Date.now()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Database member berhasil diekspor ke Excel!");
+    } catch (err) {
+      toast.error("Gagal mengekspor data member");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const totalPoints = members.reduce((sum, m) => sum + (Number(m.points) || 0), 0);
   const totalRevenue = members.reduce((sum, m) => sum + (Number(m.total_spent) || 0), 0);
   const platinumCount = members.filter(m => m.tier === "Platinum").length;
@@ -111,12 +133,25 @@ export default function Members() {
               <p className="text-slate-500 mt-1">Sistem Poin Belanja Kasir, Tingkatan Member (Tiering), & Retensi Pelanggan</p>
             </div>
 
-            <button
-              onClick={handleOpenAdd}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition"
-            >
-              <Plus size={16} /> Tambah Member Baru
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={downloading}
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                title="Download database member dan riwayat total belanja ke file Excel"
+              >
+                <Download size={15} className="text-emerald-600" />
+                <span>{downloading ? "Mengunduh..." : "Ekspor Excel"}</span>
+              </button>
+
+              <button
+                onClick={handleOpenAdd}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition"
+              >
+                <Plus size={16} /> Tambah Member Baru
+              </button>
+            </div>
           </div>
 
           {/* Metric Cards */}

@@ -1,5 +1,7 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
+// @ts-ignore
+import ExcelJS from "exceljs";
 
 const router = express.Router();
 
@@ -158,6 +160,87 @@ router.delete("/:id", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("DELETE /api/members/:id error:", err);
     res.status(500).json({ message: "Gagal menghapus member" });
+  }
+});
+
+// GET /api/members/export/excel - Export Member Database to Excel
+router.get("/export/excel", async (req: Request, res: Response) => {
+  try {
+    const { tenant_id } = req.user as any;
+
+    const result = await pool.query(`
+      SELECT name, phone, email, tier, points, total_spent, created_at
+      FROM members
+      WHERE tenant_id = $1
+      ORDER BY total_spent DESC, points DESC
+    `, [tenant_id]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'StokKita System';
+    workbook.created = new Date();
+
+    const ws = workbook.addWorksheet('Data Pelanggan & Member');
+
+    // Title
+    ws.mergeCells('A1', 'G1');
+    ws.getCell('A1').value = 'DATABASE PELANGGAN & MEMBER LOYALTY - STOKKITA';
+    ws.getCell('A1').font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 35;
+
+    ws.mergeCells('A2', 'G2');
+    ws.getCell('A2').value = `Total Member: ${result.rows.length} Orang • Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}`;
+    ws.getCell('A2').alignment = { horizontal: 'center' };
+
+    // Table Header
+    const headers = ['No', 'Nama Member', 'No WhatsApp', 'Email', 'Tier Level', 'Saldo Poin', 'Total Belanja (LTV)'];
+    ws.getRow(4).values = headers;
+    ws.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    ws.getRow(4).height = 25;
+
+    ws.columns = [
+      { key: 'no', width: 5 },
+      { key: 'name', width: 30 },
+      { key: 'phone', width: 20 },
+      { key: 'email', width: 25 },
+      { key: 'tier', width: 15 },
+      { key: 'points', width: 15 },
+      { key: 'total_spent', width: 25 }
+    ];
+
+    result.rows.forEach((m: any, idx: number) => {
+      const r = ws.addRow({
+        no: idx + 1,
+        name: m.name,
+        phone: m.phone || '-',
+        email: m.email || '-',
+        tier: m.tier || 'Silver',
+        points: Number(m.points || 0),
+        total_spent: Number(m.total_spent || 0)
+      });
+
+      r.getCell('total_spent').numFmt = '"Rp "#,##0';
+      r.getCell('points').numFmt = '#,##0';
+      r.getCell('tier').alignment = { horizontal: 'center' };
+      r.getCell('phone').alignment = { horizontal: 'center' };
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="database_member_${Date.now()}.xlsx"`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err: any) {
+    console.error("GET /api/members/export/excel error:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Gagal mengekspor data member ke Excel" });
   }
 });
 

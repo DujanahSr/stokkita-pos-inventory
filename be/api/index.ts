@@ -15,6 +15,8 @@ import omnichannelRoutes from "./routes/omnichannel.js";
 import supplierRoutes from "./routes/supplier.js";
 import notificationRoutes from "./routes/notifications.js";
 import memberRoutes from "./routes/member.js";
+import settingsRoutes from "./routes/settings.js";
+import vouchersRoutes from "./routes/vouchers.js";
 import { authenticateJWT } from "./middleware/auth.js";
 import { connectRedis } from "./redisClient.js";
 import { connectRabbitMQ, publishOrder } from "./rabbitmqClient.js";
@@ -42,6 +44,8 @@ app.use("/api/omnichannel", authenticateJWT, omnichannelRoutes);
 app.use("/api/supplier", authenticateJWT, supplierRoutes);
 app.use("/api/notifications", authenticateJWT, notificationRoutes);
 app.use("/api/members", authenticateJWT, memberRoutes);
+app.use("/api/settings", authenticateJWT, settingsRoutes);
+app.use("/api/vouchers", authenticateJWT, vouchersRoutes);
 
 // Webhook untuk simulasi E-Commerce
 app.post("/api/omnichannel/webhook", authenticateJWT, (req, res) => {

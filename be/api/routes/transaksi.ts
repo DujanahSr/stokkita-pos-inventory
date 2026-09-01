@@ -119,7 +119,13 @@ router.post("/", async (req: Request, res: Response) => {
     const member_id = req.body.member_id;
     const discount_points = Number(req.body.discount_points) || 0;
     const redeemed_points = Number(req.body.redeemed_points) || 0;
-    const final_amount = Math.max(0, total_amount - discount_points);
+    const discount_manual = Number(req.body.discount_manual) || 0;
+    const discount_manual_reason = req.body.discount_manual_reason || "";
+    const discount_voucher = Number(req.body.discount_voucher) || 0;
+    const voucher_code = req.body.voucher_code || null;
+
+    const totalDiscount = discount_points + discount_manual + discount_voucher;
+    const final_amount = Math.max(0, total_amount - totalDiscount);
     const earned_points = type === "Penjualan" ? Math.floor(final_amount / 10000) : 0;
 
     const enrichedPaymentDetails = {
@@ -128,6 +134,10 @@ router.post("/", async (req: Request, res: Response) => {
       member_name: req.body.member_name || null,
       discount_points,
       redeemed_points,
+      discount_manual,
+      discount_manual_reason,
+      discount_voucher,
+      voucher_code,
       earned_points
     };
 
@@ -145,6 +155,15 @@ router.post("/", async (req: Request, res: Response) => {
         INSERT INTO transaction_items (transaction_id, variant_id, qty, price, subtotal)
         VALUES ($1, $2, $3, $4, $5)
       `, [trxId, item.variant_id, item.qty, item.price, item.qty * item.price]);
+    }
+
+    // Increment voucher usage if voucher was applied
+    if (voucher_code && discount_voucher > 0) {
+      await client.query(`
+        UPDATE vouchers 
+        SET used_count = used_count + 1 
+        WHERE tenant_id = $1 AND code = $2
+      `, [tenant_id, voucher_code]);
     }
 
     // Update Member Points and Total Spent if member exists

@@ -8,7 +8,8 @@ import api from "../api/axios";
 import { 
   Package, Plus, Trash2, Edit3, Barcode, QrCode, 
   Search, Filter, Printer, Layers, Tag, DollarSign, 
-  TrendingUp, CheckCircle2, ChevronDown, ChevronRight 
+  TrendingUp, CheckCircle2, ChevronDown, ChevronRight,
+  Download, Upload, FileSpreadsheet
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,6 +22,12 @@ export default function Produk() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Excel Export & Import States
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [uploadingImport, setUploadingImport] = useState(false);
 
   // Modal States
   const [isAddProductModal, setIsAddProductModal] = useState(false);
@@ -220,6 +227,53 @@ export default function Produk() {
     }
   };
 
+  // Export Master Produk to Excel
+  const handleExportExcel = async () => {
+    setDownloadingExcel(true);
+    try {
+      const res = await api.get("/produk/export/excel", { responseType: "blob" });
+      const blob = new Blob([res.data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Master_Produk_${Date.now()}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("File Excel Master Produk berhasil diunduh!");
+    } catch (err) {
+      toast.error("Gagal mengunduh file Excel");
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
+
+  // Import Master Produk from Excel
+  const handleImportExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) {
+      toast.warning("Pilih file Excel (.xlsx) terlebih dahulu!");
+      return;
+    }
+    setUploadingImport(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await api.post("/produk/import/excel", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      toast.success(res.data.message || "Impor produk berhasil!");
+      setIsImportModalOpen(false);
+      setImportFile(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Gagal mengimpor file Excel");
+    } finally {
+      setUploadingImport(false);
+    }
+  };
+
   // Metrics
   const totalProducts = products.length;
   const totalVariants = products.reduce((sum, p) => sum + (p.variants?.length || 0), 0);
@@ -241,12 +295,35 @@ export default function Produk() {
               <p className="text-slate-500 mt-1">Kelola data master barang, varian dinamis, HPP modal, dan cetak label barcode</p>
             </div>
 
-            <button
-              onClick={() => setIsAddProductModal(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all"
-            >
-              <Plus size={18} /> Tambah Produk Baru
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={downloadingExcel}
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition disabled:opacity-50"
+                title="Download seluruh data master produk dan SKU ke file Excel"
+              >
+                <Download size={15} className="text-emerald-600" />
+                <span>{downloadingExcel ? "Mengunduh..." : "Ekspor Excel"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(true)}
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
+                title="Upload file Excel untuk menambah banyak produk sekaligus"
+              >
+                <Upload size={15} className="text-blue-600" />
+                <span>Impor Excel</span>
+              </button>
+
+              <button
+                onClick={() => setIsAddProductModal(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Plus size={16} /> Tambah Produk
+              </button>
+            </div>
           </div>
 
           {/* Metrics Overview */}
@@ -980,6 +1057,57 @@ export default function Produk() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* MODAL 6: IMPOR MASTER PRODUK VIA EXCEL */}
+      {isImportModalOpen && (
+        <Modal open={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Impor Data Master Produk (Excel .xlsx)">
+          <form onSubmit={handleImportExcel} className="space-y-4">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-2">
+              <p className="font-bold flex items-center gap-1.5 text-blue-800">
+                <FileSpreadsheet size={16} /> Panduan Format Kolom Excel (.xlsx):
+              </p>
+              <p className="leading-relaxed">
+                Susunan kolom: <strong>No | Nama Produk | Kategori | Barcode SKU | Ukuran | Warna | Harga Beli | Harga Jual | ROP | Stok Awal</strong>
+              </p>
+              <p className="text-[11px] text-blue-700 italic">
+                *Tips: Anda dapat mendownload file Excel saat ini melalui tombol "Ekspor Excel" sebagai acuan template.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Pilih File Spreadsheet (.xlsx)</label>
+              <input
+                type="file"
+                required
+                accept=".xlsx, .xls"
+                onChange={e => setImportFile(e.target.files?.[0] || null)}
+                className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 border border-slate-300 rounded-xl p-2 cursor-pointer"
+              />
+            </div>
+
+            <div className="pt-2 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFile(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={uploadingImport || !importFile}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Upload size={14} />
+                {uploadingImport ? "Mengunggah & Memproses..." : "Mulai Impor Produk"}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 
