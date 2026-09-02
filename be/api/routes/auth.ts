@@ -141,4 +141,40 @@ router.get("/me", authenticateJWT, async (req: Request, res: Response) => {
   res.json({ user: req.user });
 });
 
+// PUT /api/auth/change-password - Change current user's password
+router.put("/change-password", authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.user as any;
+    const { old_password, new_password } = req.body;
+
+    if (!old_password || !new_password) {
+      return res.status(400).json({ message: "Password lama dan password baru wajib diisi" });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ message: "Password baru minimal harus 6 karakter" });
+    }
+
+    // Fetch user current password hash
+    const userRes = await pool.query("SELECT password FROM users WHERE id = $1", [id]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    const currentHash = userRes.rows[0].password;
+    const isMatch = await bcrypt.compare(old_password, currentHash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Password lama tidak sesuai" });
+    }
+
+    const newHash = await bcrypt.hash(new_password, 10);
+    await pool.query("UPDATE users SET password = $1 WHERE id = $2", [newHash, id]);
+
+    res.json({ message: "Password berhasil diperbarui! Silakan gunakan password baru pada login berikutnya." });
+  } catch (err: any) {
+    console.error("PUT /change-password error:", err);
+    res.status(500).json({ message: "Gagal mengubah password" });
+  }
+});
+
 export default router;

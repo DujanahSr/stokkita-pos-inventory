@@ -120,66 +120,67 @@ export default function Sidebar() {
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
           {allNavItems.filter(item => !item.adminOnly || user?.role?.toLowerCase() === 'admin').map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   isActive
-                    ? "bg-emerald-50 text-emerald-700"
+                    ? "bg-emerald-50 text-emerald-700 font-bold"
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`
               }
             >
-              <Icon className="w-4.5 h-4.5" />
-              {label}
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{label}</span>
             </NavLink>
           ))}
 
           {user?.role?.toLowerCase() === "admin" && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="mt-2 pt-2 border-t border-slate-100 space-y-0.5">
               {adminItems.map(({ to, icon: Icon, label }) => (
                 <NavLink
                   key={to}
                   to={to}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                       isActive
-                        ? "bg-emerald-50 text-emerald-700"
+                        ? "bg-emerald-50 text-emerald-700 font-bold"
                         : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }`
                   }
                 >
-                  <Icon className="w-4.5 h-4.5" />
-                  {label}
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="truncate">{label}</span>
                 </NavLink>
               ))}
             </div>
           )}
         </nav>
 
-        <div className="px-4 py-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+        <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
+          <div className="flex items-center gap-2.5 mb-2">
+            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-emerald-700">
                 {user?.nama?.[0]?.toUpperCase() || "U"}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-800 truncate">{user?.nama}</p>
-              <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+              <p className="text-xs font-bold text-slate-800 truncate">{user?.nama}</p>
+              <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={handleLogoutClick}
             disabled={loggingOut}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50"
           >
-            <LogOut className="w-4 h-4" />
-            {loggingOut ? "Memeriksa..." : "Keluar"}
+            <LogOut className="w-3.5 h-3.5" />
+            <span>{loggingOut ? "Memeriksa..." : "Keluar / Logout"}</span>
           </button>
         </div>
       </aside>

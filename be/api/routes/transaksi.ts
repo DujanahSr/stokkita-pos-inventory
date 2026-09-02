@@ -6,6 +6,16 @@ import { createNotification } from "../utils/notificationHelper.js";
 
 const router = express.Router();
 
+// Auto add notes column to transaction_items if not exists
+pool.query(`
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='transaction_items' AND column_name='notes') THEN
+      ALTER TABLE transaction_items ADD COLUMN notes TEXT;
+    END IF;
+  END $$;
+`).catch(err => console.error("Init transaction_items notes column error:", err));
+
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { tenant_id } = req.user as any;
@@ -124,8 +134,14 @@ router.post("/", async (req: Request, res: Response) => {
     const discount_voucher = Number(req.body.discount_voucher) || 0;
     const voucher_code = req.body.voucher_code || null;
 
+    const tax_amount = Number(req.body.tax_amount) || 0;
+    const service_charge_amount = Number(req.body.service_charge_amount) || 0;
+    const rounding_amount = Number(req.body.rounding_amount) || 0;
+
     const totalDiscount = discount_points + discount_manual + discount_voucher;
-    const final_amount = Math.max(0, total_amount - totalDiscount);
+    const baseSubtotal = Math.max(0, total_amount - totalDiscount);
+    const calculatedFinal = Math.max(0, baseSubtotal + tax_amount + service_charge_amount + rounding_amount);
+    const final_amount = req.body.final_amount !== undefined ? Number(req.body.final_amount) : calculatedFinal;
     const earned_points = type === "Penjualan" ? Math.floor(final_amount / 10000) : 0;
 
     const enrichedPaymentDetails = {
@@ -138,6 +154,9 @@ router.post("/", async (req: Request, res: Response) => {
       discount_manual_reason,
       discount_voucher,
       voucher_code,
+      tax_amount,
+      service_charge_amount,
+      rounding_amount,
       earned_points
     };
 
@@ -149,12 +168,12 @@ router.post("/", async (req: Request, res: Response) => {
     const trxId = tRes.rows[0].id;
     const createdAt = tRes.rows[0].created_at;
     
-    // Insert Items
+    // Insert Items with item-level notes
     for (let item of items) {
       await client.query(`
-        INSERT INTO transaction_items (transaction_id, variant_id, qty, price, subtotal)
-        VALUES ($1, $2, $3, $4, $5)
-      `, [trxId, item.variant_id, item.qty, item.price, item.qty * item.price]);
+        INSERT INTO transaction_items (transaction_id, variant_id, qty, price, subtotal, notes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [trxId, item.variant_id, item.qty, item.price, item.qty * item.price, item.notes || null]);
     }
 
     // Increment voucher usage if voucher was applied

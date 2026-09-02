@@ -122,13 +122,13 @@ export default function Inventori() {
     setTransferError("");
     setLoadingTransfer(true);
     try {
-      await api.post("/master/transfer", {
-        from_warehouse_id: selectedW,
-        to_warehouse_id: transferForm.to_warehouse_id,
+      const res = await api.post("/master/transfers", {
+        source_warehouse_id: selectedW,
+        destination_warehouse_id: transferForm.to_warehouse_id,
         variant_id: transferForm.variant_id,
         qty: Number(transferForm.qty)
       });
-      toast.success("Mutasi transfer stok berhasil dikirim!");
+      toast.success(res.data.message || "Surat jalan transfer berhasil diterbitkan!");
       setIsModalOpen(false);
       fetchInventory(selectedW);
       fetchTransfers();
@@ -140,6 +140,52 @@ export default function Inventori() {
     } finally {
       setLoadingTransfer(false);
     }
+  };
+
+  const handleReceiveTransfer = (trfId: string, trfNo: string) => {
+    toast.warning(`Konfirmasi penerimaan barang ${trfNo}?`, {
+      description: "Pastikan fisik barang sudah tiba dan sesuai jumlahnya. Stok cabang penerima akan otomatis bertambah.",
+      action: {
+        label: "Ya, Terima Barang",
+        onClick: async () => {
+          try {
+            const res = await api.put(`/master/transfers/${trfId}/receive`);
+            toast.success(res.data.message || "Penerimaan barang berhasil dikonfirmasi!");
+            fetchTransfers();
+            if (selectedW) fetchInventory(selectedW);
+          } catch (err: any) {
+            toast.error("Gagal konfirmasi terima: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
+  };
+
+  const handleCancelTransfer = (trfId: string, trfNo: string) => {
+    toast.error(`Batalkan transfer ${trfNo}?`, {
+      description: "Barang akan dikembalikan ke stok gudang asal.",
+      action: {
+        label: "Batalkan Transfer",
+        onClick: async () => {
+          try {
+            const res = await api.put(`/master/transfers/${trfId}/cancel`);
+            toast.success(res.data.message || "Transfer berhasil dibatalkan");
+            fetchTransfers();
+            if (selectedW) fetchInventory(selectedW);
+          } catch (err: any) {
+            toast.error("Gagal membatalkan transfer: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
   };
 
   return (
@@ -290,13 +336,13 @@ export default function Inventori() {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="text-slate-400 bg-slate-50 border-b border-slate-100 uppercase tracking-wider font-semibold">
-                        <th className="p-3.5 pl-6">Tanggal</th>
-                        <th className="p-3.5">Produk & Varian</th>
-                        <th className="p-3.5">Dari Gudang Asal</th>
-                        <th className="p-3.5">Ke Gudang Tujuan</th>
-                        <th className="p-3.5 text-center">Qty Mutasi</th>
-                        <th className="p-3.5 text-center">Status</th>
-                        <th className="p-3.5 text-center pr-6">Dokumen</th>
+                        <th className="p-3.5 pl-6">No. SJ & Tanggal</th>
+                        <th className="p-3.5">Produk & SKU</th>
+                        <th className="p-3.5">Cabang Asal</th>
+                        <th className="p-3.5">Cabang Tujuan</th>
+                        <th className="p-3.5 text-center">Qty</th>
+                        <th className="p-3.5 text-center">Status Pengiriman</th>
+                        <th className="p-3.5 text-center pr-6">Aksi & Dokumen</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 font-medium">
@@ -304,36 +350,79 @@ export default function Inventori() {
                          <tr>
                            <td colSpan={7} className="py-8 text-center text-slate-400">Belum ada riwayat mutasi barang.</td>
                          </tr>
-                      ) : transfers.map((t) => (
-                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3.5 pl-6 text-slate-600 font-mono">
-                            {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
-                          </td>
-                          <td className="p-3.5">
-                            <div className="font-bold text-slate-800">{t.product_name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{t.color} • {t.size}</div>
-                          </td>
-                          <td className="p-3.5 font-semibold text-slate-700">{t.from_warehouse}</td>
-                          <td className="p-3.5 font-semibold text-slate-700">{t.to_warehouse}</td>
-                          <td className="p-3.5 text-center font-bold text-slate-800">
-                            <span className="px-2.5 py-0.5 bg-slate-100 rounded-lg">{t.qty} pcs</span>
-                          </td>
-                          <td className="p-3.5 text-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              {t.status || "Selesai"}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-center pr-6">
-                            <button
-                              onClick={() => setSelectedDeliveryNote(t)}
-                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-sm transition mx-auto"
-                              title="Cetak Surat Jalan Pengiriman Antar Gudang"
-                            >
-                              <FileText size={13} /> Surat Jalan
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      ) : transfers.map((t) => {
+                        const isInTransit = t.status === "IN_TRANSIT";
+                        const isReceived = t.status === "RECEIVED";
+                        const isCancelled = t.status === "CANCELLED";
+
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3.5 pl-6">
+                              <div className="font-mono font-bold text-slate-800">{t.transfer_no || `TRF-${t.id.slice(0, 6)}`}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                {new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="font-bold text-slate-800">{t.product_name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{t.color} • Sz {t.size} ({t.sku})</div>
+                            </td>
+                            <td className="p-3.5 font-semibold text-slate-700">{t.source_warehouse_name || t.from_warehouse}</td>
+                            <td className="p-3.5 font-semibold text-slate-700">{t.destination_warehouse_name || t.to_warehouse}</td>
+                            <td className="p-3.5 text-center font-bold text-slate-800">
+                              <span className="px-2.5 py-0.5 bg-slate-100 rounded-lg">{t.qty} pcs</span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              {isInTransit ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                  🚚 In-Transit (Dikirim)
+                                </span>
+                              ) : isReceived ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  ✅ Barang Diterima
+                                </span>
+                              ) : isCancelled ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  ❌ Dibatalkan
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                  {t.status}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-center pr-6">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {isInTransit && (
+                                  <>
+                                    <button
+                                      onClick={() => handleReceiveTransfer(t.id, t.transfer_no || t.id.slice(0, 6))}
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs transition flex items-center gap-1"
+                                      title="Konfirmasi Fisik Barang Tiba di Cabang Tujuan"
+                                    >
+                                      Terima Fisik
+                                    </button>
+                                    <button
+                                      onClick={() => handleCancelTransfer(t.id, t.transfer_no || t.id.slice(0, 6))}
+                                      className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-[10px] font-bold transition"
+                                      title="Batalkan Pengiriman dan Kembalikan Stok"
+                                    >
+                                      Batal
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => setSelectedDeliveryNote(t)}
+                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs transition"
+                                  title="Cetak Dokumen Surat Jalan"
+                                >
+                                  <FileText size={11} /> Surat Jalan
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

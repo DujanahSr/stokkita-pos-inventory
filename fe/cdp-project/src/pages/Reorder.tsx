@@ -218,6 +218,29 @@ _StokKita Supply Chain & Inventory Operations_`;
     }
   };
 
+  // Good Receipt PO (Terima Barang Fisik)
+  const handleReceivePO = (po: any) => {
+    toast.warning(`Konfirmasi penerimaan barang untuk ${po.kode_po || 'PO'}?`, {
+      description: `Barang "${po.produk || po.product_name}" sebanyak ${po.qty} pcs akan otomatis dimasukkan ke stok ${po.warehouse || po.warehouse_name}.`,
+      action: {
+        label: "Ya, Terima Barang",
+        onClick: async () => {
+          try {
+            await api.put(`/reorder/${po.id}/terima`);
+            load();
+            toast.success(`Barang berhasil diterima! Stok gudang otomatis bertambah.`);
+          } catch (err: any) {
+            toast.error("Gagal menerima barang: " + (err.response?.data?.message || err.message));
+          }
+        }
+      },
+      cancel: {
+        label: "Batal",
+        onClick: () => {}
+      }
+    });
+  };
+
   // Update PO Status
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
@@ -414,14 +437,14 @@ _StokKita Supply Chain & Inventory Operations_`;
                                     <FileText size={13} /> {downloadingPdfId === po.id ? "..." : "PDF"}
                                   </button>
 
-                                  {/* Terima Barang Button */}
-                                  {po.status === "Menunggu" && (
+                                  {/* Terima Barang Button (Good Receipt) */}
+                                  {(po.status === "Menunggu" || po.status === "Disarankan" || po.status === "SUGGESTION") && (
                                     <button
-                                      onClick={() => handleUpdateStatus(po.id, "Selesai")}
-                                      className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                                      title="Barang Telah Tiba di Gudang (Selesai)"
+                                      onClick={() => handleReceivePO(po)}
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs transition"
+                                      title="Konfirmasi Fisik Barang Tiba di Gudang (Good Receipt PO)"
                                     >
-                                      <CheckCircle2 size={16} />
+                                      <CheckCircle2 size={13} /> Terima Barang
                                     </button>
                                   )}
                                 </div>

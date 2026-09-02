@@ -11,15 +11,24 @@ import {
   Pause, Play, ShoppingCart, Bookmark,
   Crown, Gift, Sparkles, UserCheck, Search, X, Phone,
   Coins, ArrowUpRight, ArrowDownLeft, Building, UserPlus, Eye, RefreshCw, Package,
-  Ticket, Percent, Keyboard, Sliders
+  Ticket, Percent, Keyboard, Sliders, Volume2, VolumeX, FileEdit, StickyNote
 } from "lucide-react";
 import { toast } from "sonner";
+import { posAudio } from "../utils/audio";
+
+interface CartItem {
+  variant_id: string;
+  qty: number;
+  price: number;
+  name: string;
+  notes?: string;
+}
 
 interface HeldCart {
   id: string;
   name: string;
   notes?: string;
-  items: { variant_id: string; qty: number; price: number; name: string }[];
+  items: CartItem[];
   total: number;
   held_at: string;
   warehouse_id: string;
@@ -58,9 +67,19 @@ export default function Transaksi() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const [tipe, setTipe] = useState("Penjualan");
-  const [cart, setCart] = useState<{ variant_id: string; qty: number; price: number; name: string }[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [returnReason, setReturnReason] = useState("Barang Rusak / Cacat");
   const [returnNotes, setReturnNotes] = useState("");
+  
+  // Audio Feedback State
+  const [audioEnabled, setAudioEnabled] = useState(posAudio.enabled);
+
+  // Store Settings (Tax, Service, Rounding)
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+
+  // Item Note Editing State
+  const [editingNoteVariantId, setEditingNoteVariantId] = useState<string | null>(null);
+  const [itemNoteInput, setItemNoteInput] = useState("");
   
   // Struk Lookup for Returns State
   const [receiptLookupInput, setReceiptLookupInput] = useState("");
@@ -132,7 +151,6 @@ export default function Transaksi() {
   const [voucherInput, setVoucherInput] = useState("");
   const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
   const [loadingVoucher, setLoadingVoucher] = useState(false);
-  const [storeSettings, setStoreSettings] = useState<any>(null);
 
   useEffect(() => {
     fetchWarehouses();
@@ -262,9 +280,18 @@ export default function Transaksi() {
     }
   };
 
+  // Audio Toggle Handler
+  const handleToggleAudio = () => {
+    const newState = posAudio.toggleAudio();
+    setAudioEnabled(newState);
+    if (newState) toast.success("Suara Audio Kasir Aktif (Beep & Chime)");
+    else toast.info("Suara Audio Kasir Dimatikan");
+  };
+
   // Cart & POS Handlers
   const handleAddToCart = (vid: string, e?: React.ChangeEvent<HTMLSelectElement>) => {
     if (!activeShift) {
+      posAudio.playErrorBeep();
       toast.warning("Shift kasir belum dibuka! Buka shift kasir terlebih dahulu untuk mulai transaksi.");
       setIsOpenShiftModal(true);
       if (e) e.target.value = "";
@@ -274,11 +301,13 @@ export default function Transaksi() {
     if (!vid) return;
     const inv = inventory.find(i => i.variant_id === vid);
     if (!inv) {
+      posAudio.playErrorBeep();
       if (e) e.target.value = "";
       return;
     }
     
     if (tipe === 'Penjualan' && inv.qty <= 0) {
+      posAudio.playErrorBeep();
       toast.error(`Stok "${inv.product_name}" habis/kosong!`);
       if (e) e.target.value = "";
       return;
@@ -287,14 +316,17 @@ export default function Transaksi() {
     const existing = cart.find(c => c.variant_id === vid);
     if (existing) {
       if (tipe === 'Penjualan' && existing.qty >= inv.qty) {
+        posAudio.playErrorBeep();
         toast.warning(`Stok tidak mencukupi! Maksimal tersedia: ${inv.qty} pcs`);
         if (e) e.target.value = "";
         return;
       }
       setCart(cart.map(c => c.variant_id === vid ? { ...c, qty: c.qty + 1 } : c));
+      posAudio.playScanBeep();
       toast.info(`+1 ${inv.product_name} (${inv.sku})`);
     } else {
       setCart([...cart, { variant_id: inv.variant_id, qty: 1, price: inv.price_sell, name: `${inv.product_name} (${inv.sku})` }]);
+      posAudio.playScanBeep();
       toast.success(`Ditambahkan: ${inv.product_name}`);
     }
     if (e) e.target.value = "";
@@ -307,6 +339,7 @@ export default function Transaksi() {
       if (!scanned) return;
 
       if (!activeShift) {
+        posAudio.playErrorBeep();
         toast.warning("Shift kasir belum dibuka! Buka shift kasir terlebih dahulu untuk memproses scan barcode.");
         setIsOpenShiftModal(true);
         setBarcodeInput("");
@@ -317,6 +350,7 @@ export default function Transaksi() {
       if (inv) {
         handleAddToCart(inv.variant_id);
       } else {
+        posAudio.playErrorBeep();
         toast.error(`Produk dengan Barcode/SKU "${scanned}" tidak ditemukan!`);
       }
       setBarcodeInput("");
@@ -332,10 +366,19 @@ export default function Transaksi() {
   const updateQty = (vid: string, qty: number) => {
     const inv = inventory.find(i => i.variant_id === vid);
     if (tipe === 'Penjualan' && inv && qty > inv.qty) {
+      posAudio.playErrorBeep();
       toast.warning("Maksimal stok tersedia: " + inv.qty);
       return;
     }
     setCart(cart.map(c => c.variant_id === vid ? { ...c, qty: Math.max(1, qty) } : c));
+  };
+
+  // Item Note Handler
+  const handleSaveItemNote = (vid: string) => {
+    setCart(cart.map(c => c.variant_id === vid ? { ...c, notes: itemNoteInput.trim() || undefined } : c));
+    setEditingNoteVariantId(null);
+    setItemNoteInput("");
+    toast.success("Catatan item tersimpan");
   };
 
   // Member, Discounts & Cart Total Calculations
@@ -357,7 +400,38 @@ export default function Transaksi() {
   const voucherDiscountAmount = appliedVoucher ? Number(appliedVoucher.discount_amount || 0) : 0;
 
   const totalDiscount = pointsDiscount + manualDiscountAmount + voucherDiscountAmount;
-  const cartTotal = Math.max(0, rawCartTotal - totalDiscount);
+  const baseDiscountedTotal = Math.max(0, rawCartTotal - totalDiscount);
+
+  // Financial Policy: Tax & Service & Rounding
+  const isTaxEnabled = Boolean(storeSettings?.enable_tax);
+  const taxRate = Number(storeSettings?.tax_rate) || 11.0;
+  const isTaxExclusive = storeSettings?.tax_type === "EXCLUSIVE";
+  
+  let taxAmount = 0;
+  if (isTaxEnabled) {
+    if (isTaxExclusive) {
+      taxAmount = Math.round((baseDiscountedTotal * taxRate) / 100);
+    } else {
+      taxAmount = Math.round(baseDiscountedTotal - (baseDiscountedTotal / (1 + taxRate / 100)));
+    }
+  }
+
+  const isServiceEnabled = Boolean(storeSettings?.enable_service_charge);
+  const serviceRate = Number(storeSettings?.service_charge_rate) || 0;
+  const serviceChargeAmount = isServiceEnabled ? Math.round((baseDiscountedTotal * serviceRate) / 100) : 0;
+
+  const intermediateTotal = baseDiscountedTotal + (isTaxExclusive ? taxAmount : 0) + serviceChargeAmount;
+
+  // Cash Rounding
+  const isRoundingEnabled = Boolean(storeSettings?.enable_cash_rounding);
+  let roundingAmount = 0;
+  if (isRoundingEnabled && intermediateTotal > 0) {
+    const rounded = Math.ceil(intermediateTotal / 100) * 100;
+    roundingAmount = rounded - intermediateTotal;
+  }
+
+  // Final Payable Cart Total
+  const cartTotal = Math.max(0, intermediateTotal + roundingAmount);
   const potentialPointsEarned = tipe === "Penjualan" ? Math.floor(cartTotal / 10000) : 0;
 
   // Keyboard Hotkeys for Cashier Speed
@@ -785,7 +859,7 @@ export default function Transaksi() {
       const res = await api.post("/transaksi", {
         warehouse_id: selectedW,
         type: tipe,
-        items: cart.map(c => ({ variant_id: c.variant_id, qty: c.qty, price: c.price })),
+        items: cart.map(c => ({ variant_id: c.variant_id, qty: c.qty, price: c.price, notes: c.notes })),
         payment_method: effectivePaymentMethod,
         payment_details: {
           ...paymentDetailsPayload,
@@ -793,7 +867,10 @@ export default function Transaksi() {
           discount_manual: manualDiscountAmount,
           discount_manual_reason: manualDiscountReason,
           discount_voucher: voucherDiscountAmount,
-          voucher_code: appliedVoucher?.code || null
+          voucher_code: appliedVoucher?.code || null,
+          tax_amount: taxAmount,
+          service_charge_amount: serviceChargeAmount,
+          rounding_amount: roundingAmount
         },
         return_reason: tipe === "Retur" ? returnReasonFormatted : undefined,
         member_id: selectedMember?.id || null,
@@ -803,10 +880,15 @@ export default function Transaksi() {
         discount_manual: manualDiscountAmount,
         discount_manual_reason: manualDiscountReason,
         discount_voucher: voucherDiscountAmount,
-        voucher_code: appliedVoucher?.code || null
+        voucher_code: appliedVoucher?.code || null,
+        tax_amount: taxAmount,
+        service_charge_amount: serviceChargeAmount,
+        rounding_amount: roundingAmount,
+        final_amount: cartTotal
       });
 
       setIsModalOpen(false);
+      posAudio.playSuccessChime();
       
       // Set Receipt Data for printing
       setReceiptData({
@@ -816,6 +898,7 @@ export default function Transaksi() {
         warehouse: warehouses.find(w => w.id === selectedW)?.name || "",
         items: [...cart],
         raw_total: rawCartTotal,
+        base_discounted: baseDiscountedTotal,
         total: cartTotal,
         type: tipe,
         payment_method: effectivePaymentMethod,
@@ -823,7 +906,17 @@ export default function Transaksi() {
           ...paymentDetailsPayload,
           discount_manual: manualDiscountAmount,
           discount_voucher: voucherDiscountAmount,
-          voucher_code: appliedVoucher?.code || null
+          voucher_code: appliedVoucher?.code || null,
+          tax_amount: taxAmount,
+          service_charge_amount: serviceChargeAmount,
+          rounding_amount: roundingAmount
+        },
+        taxes: {
+          tax_amount: taxAmount,
+          tax_rate: taxRate,
+          tax_type: storeSettings?.tax_type || "EXCLUSIVE",
+          service_charge_amount: serviceChargeAmount,
+          rounding_amount: roundingAmount
         },
         return_reason: tipe === "Retur" ? returnReasonFormatted : null,
         discounts: {
@@ -989,6 +1082,21 @@ export default function Transaksi() {
 
           {/* Right Utilities */}
           <div className="flex items-center gap-2">
+            {/* Audio Feedback Speaker Toggle */}
+            <button
+              type="button"
+              onClick={handleToggleAudio}
+              className={`p-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 transition shadow-2xs ${
+                audioEnabled
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                  : "bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200"
+              }`}
+              title={audioEnabled ? "Suara Beep Kasir Aktif (Klik untuk matikan)" : "Suara Beep Kasir Nonaktif (Klik untuk aktifkan)"}
+            >
+              {audioEnabled ? <Volume2 size={16} className="text-emerald-600" /> : <VolumeX size={16} />}
+              <span className="hidden md:inline text-[11px] font-bold">{audioEnabled ? "Audio ON" : "Mute"}</span>
+            </button>
+
             {/* Cek Stok Cabang */}
             <button
               type="button"
@@ -1351,43 +1459,102 @@ export default function Transaksi() {
                     </div>
                   ) : (
                     cart.map(item => (
-                      <div key={item.variant_id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-bold text-slate-800 truncate">{item.name}</h4>
-                          <span className="text-[11px] text-slate-500">{fmt(item.price)} / pcs</span>
-                        </div>
+                      <div key={item.variant_id} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-bold text-slate-800 truncate">{item.name}</h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[11px] text-slate-500">{fmt(item.price)} / pcs</span>
+                              {item.notes ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingNoteVariantId(item.variant_id);
+                                    setItemNoteInput(item.notes || "");
+                                  }}
+                                  className="text-[10px] text-amber-800 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 rounded font-medium truncate max-w-[130px] flex items-center gap-1"
+                                  title="Klik untuk edit catatan item"
+                                >
+                                  <span>📝</span>
+                                  <span className="truncate">{item.notes}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingNoteVariantId(item.variant_id);
+                                    setItemNoteInput("");
+                                  }}
+                                  className="text-[10px] text-slate-400 hover:text-emerald-700 flex items-center gap-0.5"
+                                  title="Tambah catatan khusus (bungkus kado, tali ekstra, dsb)"
+                                >
+                                  <StickyNote size={11} /> +Catatan
+                                </button>
+                              )}
+                            </div>
+                          </div>
 
-                        {/* Interactive Qty Controls */}
-                        <div className="flex items-center gap-1">
+                          {/* Interactive Qty Controls */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.variant_id, item.qty - 1)}
+                              className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
+                            >
+                              -
+                            </button>
+                            <span className="w-7 text-center font-bold text-xs text-slate-800">{item.qty}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateQty(item.variant_id, item.qty + 1)}
+                              className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Subtotal & Trash */}
+                          <div className="text-right min-w-[70px]">
+                            <div className="font-bold text-xs text-slate-900">{fmt(item.qty * item.price)}</div>
+                          </div>
+
                           <button
                             type="button"
-                            onClick={() => updateQty(item.variant_id, item.qty - 1)}
-                            className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
+                            onClick={() => removeCart(item.variant_id)}
+                            className="text-slate-400 hover:text-red-600 p-1 transition"
                           >
-                            -
-                          </button>
-                          <span className="w-7 text-center font-bold text-xs text-slate-800">{item.qty}</span>
-                          <button
-                            type="button"
-                            onClick={() => updateQty(item.variant_id, item.qty + 1)}
-                            className="w-6 h-6 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 flex items-center justify-center font-bold text-xs"
-                          >
-                            +
+                            <Trash2 size={13} />
                           </button>
                         </div>
 
-                        {/* Subtotal & Trash */}
-                        <div className="text-right min-w-[70px]">
-                          <div className="font-bold text-xs text-slate-900">{fmt(item.qty * item.price)}</div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => removeCart(item.variant_id)}
-                          className="text-slate-400 hover:text-red-600 p-1 transition"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {/* Inline Note Editor */}
+                        {editingNoteVariantId === item.variant_id && (
+                          <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg flex items-center gap-1.5 animate-in fade-in">
+                            <input
+                              type="text"
+                              value={itemNoteInput}
+                              onChange={e => setItemNoteInput(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleSaveItemNote(item.variant_id)}
+                              placeholder="Catatan khusus (misal: Bungkus Kado, No Box)..."
+                              className="flex-1 px-2 py-1 text-xs border border-amber-300 rounded-md bg-white outline-none"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveItemNote(item.variant_id)}
+                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-bold"
+                            >
+                              Simpan
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoteVariantId(null)}
+                              className="px-1.5 py-1 text-slate-500 text-xs font-bold"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -1443,9 +1610,15 @@ export default function Transaksi() {
 
                   {/* Totals & Discounts Breakdown */}
                   <div className="space-y-1 text-xs">
+                    {totalDiscount > 0 && (
+                      <div className="flex justify-between text-slate-500 font-medium">
+                        <span>Subtotal Kotor:</span>
+                        <span>{fmt(rawCartTotal)}</span>
+                      </div>
+                    )}
                     {pointsDiscount > 0 && (
                       <div className="flex justify-between text-emerald-700 font-medium">
-                        <span>Diskon Loyalty Poin:</span>
+                        <span>Diskon Poin Loyalty:</span>
                         <span>-{fmt(pointsDiscount)}</span>
                       </div>
                     )}
@@ -1461,8 +1634,26 @@ export default function Transaksi() {
                         <span>-{fmt(voucherDiscountAmount)}</span>
                       </div>
                     )}
+                    {isTaxEnabled && (
+                      <div className="flex justify-between text-slate-600 font-medium">
+                        <span>PPN {taxRate}% {isTaxExclusive ? "(Exclusive)" : "(Sudah Termasuk)"}:</span>
+                        <span>{isTaxExclusive ? `+${fmt(taxAmount)}` : fmt(taxAmount)}</span>
+                      </div>
+                    )}
+                    {isServiceEnabled && serviceChargeAmount > 0 && (
+                      <div className="flex justify-between text-slate-600 font-medium">
+                        <span>Biaya Layanan ({serviceRate}%):</span>
+                        <span>+{fmt(serviceChargeAmount)}</span>
+                      </div>
+                    )}
+                    {isRoundingEnabled && roundingAmount !== 0 && (
+                      <div className="flex justify-between text-slate-600 font-medium">
+                        <span>Pembulatan Kasir:</span>
+                        <span>{roundingAmount > 0 ? `+${fmt(roundingAmount)}` : fmt(roundingAmount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-baseline font-black pt-0.5 border-t border-slate-200">
-                      <span className="text-slate-700 text-xs uppercase tracking-wider">Total Akhir:</span>
+                      <span className="text-slate-700 text-xs uppercase tracking-wider">Total Tagihan:</span>
                       <span className="text-emerald-700 text-lg font-black">{fmt(cartTotal)}</span>
                     </div>
                   </div>
@@ -3043,6 +3234,9 @@ export default function Transaksi() {
                     <tr key={item.variant_id}>
                       <td className="py-1">
                         <div className="font-semibold text-slate-800">{item.name}</div>
+                        {item.notes && (
+                          <div className="text-[9px] text-slate-500 italic pl-1">Note: {item.notes}</div>
+                        )}
                         <div className="text-[10px] text-slate-500">{item.qty} x {fmt(item.price)}</div>
                       </td>
                       <td className="py-1 text-right align-bottom font-bold text-slate-800">{fmt(item.qty * item.price)}</td>
@@ -3071,6 +3265,26 @@ export default function Transaksi() {
                   <div className="flex justify-between text-blue-700">
                     <span>Voucher ({receiptData.discounts.voucher_code}):</span>
                     <span>-{fmt(receiptData.discounts.voucher)}</span>
+                  </div>
+                )}
+
+                {/* Pajak & Biaya Layanan */}
+                {receiptData.taxes?.tax_amount > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>PPN {receiptData.taxes.tax_rate || 11}% ({receiptData.taxes.tax_type === 'EXCLUSIVE' ? 'Excl' : 'Incl'}):</span>
+                    <span>{receiptData.taxes.tax_type === 'EXCLUSIVE' ? `+${fmt(receiptData.taxes.tax_amount)}` : fmt(receiptData.taxes.tax_amount)}</span>
+                  </div>
+                )}
+                {receiptData.taxes?.service_charge_amount > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Biaya Layanan:</span>
+                    <span>+{fmt(receiptData.taxes.service_charge_amount)}</span>
+                  </div>
+                )}
+                {receiptData.taxes?.rounding_amount !== 0 && receiptData.taxes?.rounding_amount !== undefined && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Pembulatan:</span>
+                    <span>{receiptData.taxes.rounding_amount > 0 ? `+${fmt(receiptData.taxes.rounding_amount)}` : fmt(receiptData.taxes.rounding_amount)}</span>
                   </div>
                 )}
 
