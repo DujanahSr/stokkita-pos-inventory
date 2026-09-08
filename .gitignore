@@ -13,6 +13,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Mengabaikan file sistem operasi
+# Mengabaikan file sistem operasi & IDE
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+
+# TypeScript build cache & uploads
+*.tsbuildinfo
+be/uploads/
+fe/cdp-project/dist/

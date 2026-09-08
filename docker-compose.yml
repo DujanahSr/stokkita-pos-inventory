@@ -1,58 +1,68 @@
 services:
+  # Nginx Gateway & Reverse Proxy (Single Entry Point)
+  nginx:
+    image: nginx:alpine
+    container_name: stokkita_gateway
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - stokkita_network
+
+  # Backend Express API
   backend:
     build:
       context: ./be
       dockerfile: Dockerfile
-    container_name: stokkita-backend
+    container_name: stokkita_backend
+    restart: always
     ports:
       - "3000:3000"
-    env_file:
-      - ./be/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/stokkita_db}
+      - JWT_SECRET=${JWT_SECRET:-stokkita_jwt_secret_production_2026}
+      - REDIS_URL=redis://redis:6379
+      - AWS_REGION=${AWS_REGION:-ap-southeast-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
     depends_on:
       - redis
-      - rabbitmq
-    restart: unless-stopped
-    environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+    networks:
+      - stokkita_network
 
-  worker:
-    build:
-      context: ./be
-      dockerfile: Dockerfile
-    container_name: stokkita-worker
-    command: ["node", "dist/api/worker.js"]
-    env_file:
-      - ./be/.env
-    depends_on:
-      - redis
-      - rabbitmq
-      - backend
-    restart: unless-stopped
-    environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: stokkita-rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: stokkita-redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-
+  # Frontend React SPA
   frontend:
     build:
       context: ./fe/cdp-project
       dockerfile: Dockerfile
-    container_name: stokkita-frontend
-    ports:
-      - "5173:80" 
-    depends_on:
-      - backend
-    restart: unless-stopped
+    container_name: stokkita_frontend
+    restart: always
+    networks:
+      - stokkita_network
+
+  # Redis In-Memory Cache
+  redis:
+    image: redis:7-alpine
+    container_name: stokkita_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - stokkita_network
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  stokkita_network:
+    driver: bridge

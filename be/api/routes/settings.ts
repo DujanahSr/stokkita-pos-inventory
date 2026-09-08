@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import pool from "../db.js";
 import { requireRole } from "../middleware/auth.js";
+import { s3Service } from "../services/s3Service.js";
 
 const router = express.Router();
 
@@ -135,6 +136,73 @@ router.put("/", requireRole("Admin"), async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("PUT /api/settings error:", err);
     res.status(500).json({ message: "Gagal menyimpan pengaturan toko" });
+  }
+});
+
+// GET /api/settings/cloud-status - Check AWS S3 Cloud Integration Status
+router.get("/cloud-status", requireRole("Admin"), async (_req: Request, res: Response) => {
+  res.json(s3Service.getStatus());
+});
+
+// POST /api/settings/backup/s3 - Upload Database Backup directly to AWS S3 Cloud Bucket
+router.post("/backup/s3", requireRole("Admin"), async (req: Request, res: Response) => {
+  try {
+    const { tenant_id, tenant_name } = req.user as any;
+
+    const [
+      productsRes,
+      variantsRes,
+      inventoryRes,
+      warehousesRes,
+      membersRes,
+      vouchersRes,
+      suppliersRes,
+      transactionsRes,
+      settingsRes
+    ] = await Promise.all([
+      pool.query("SELECT * FROM products WHERE tenant_id = $1", [tenant_id]),
+      pool.query("SELECT v.* FROM variants v JOIN products p ON v.product_id = p.id WHERE p.tenant_id = $1", [tenant_id]),
+      pool.query("SELECT i.* FROM inventory i JOIN warehouses w ON i.warehouse_id = w.id WHERE w.tenant_id = $1", [tenant_id]),
+      pool.query("SELECT * FROM warehouses WHERE tenant_id = $1", [tenant_id]),
+      pool.query("SELECT * FROM members WHERE tenant_id = $1", [tenant_id]),
+      pool.query("SELECT * FROM vouchers WHERE tenant_id = $1", [tenant_id]),
+      pool.query("SELECT * FROM suppliers WHERE tenant_id = $1", [tenant_id]),
+      pool.query("SELECT * FROM transactions WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 500", [tenant_id]),
+      pool.query("SELECT * FROM store_settings WHERE tenant_id = $1", [tenant_id])
+    ]);
+
+    const backupData = {
+      system: "StokKita Enterprise POS",
+      version: "2.0.0",
+      backup_date: new Date().toISOString(),
+      tenant_id,
+      tenant_name,
+      settings: settingsRes.rows[0] || null,
+      warehouses: warehousesRes.rows,
+      products: productsRes.rows,
+      variants: variantsRes.rows,
+      inventory: inventoryRes.rows,
+      members: membersRes.rows,
+      vouchers: vouchersRes.rows,
+      suppliers: suppliersRes.rows,
+      recent_transactions: transactionsRes.rows
+    };
+
+    const jsonContent = JSON.stringify(backupData, null, 2);
+    const fileName = `stokkita_backup_${Date.now()}.json`;
+
+    const uploadResult = await s3Service.uploadBackup({ jsonContent, fileName });
+
+    res.json({
+      message: `Cadangan database berhasil diunggah ke ${uploadResult.storage === 'AWS_S3' ? 'AWS S3 Cloud Bucket' : 'Penyimpanan Lokal'}!`,
+      file_name: fileName,
+      url: uploadResult.url,
+      storage: uploadResult.storage,
+      size: uploadResult.size
+    });
+  } catch (err: any) {
+    console.error("POST /api/settings/backup/s3 error:", err);
+    res.status(500).json({ message: "Gagal mengunggah cadangan ke AWS S3: " + err.message });
   }
 });
 

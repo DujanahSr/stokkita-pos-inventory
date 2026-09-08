@@ -15,6 +15,8 @@ import Members from "./pages/Members";
 import Register from "./pages/Register";
 import Vouchers from "./pages/Vouchers";
 import Settings from "./pages/Settings";
+import Superadmin from "./pages/Superadmin";
+import SuperadminRoute from "./routes/SuperadminRoute";
 
 import { Toaster } from "sonner";
 
@@ -26,6 +28,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/superadmin" element={<SuperadminRoute><Superadmin /></SuperadminRoute>} />
           <Route path="/" element={<AdminRoute><Dashboard /></AdminRoute>} />
           <Route path="/produk" element={<AdminRoute><Produk /></AdminRoute>} />
           <Route path="/inventori" element={<AdminRoute><Inventori /></AdminRoute>} />

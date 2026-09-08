@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { 
   Store, Save, Printer, Phone, MapPin, 
   Globe, MessageSquare, ShieldCheck, Sparkles,
-  Percent, Coins, Download, Upload, Database, CheckCircle2
+  Percent, Coins, Download, Upload, Database, CheckCircle2,
+  Cloud, Server, Radio, HardDrive
 } from "lucide-react";
 
 export default function Settings() {
@@ -14,6 +15,9 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [uploadingS3, setUploadingS3] = useState(false);
+  const [testingS3, setTestingS3] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -60,8 +64,18 @@ export default function Settings() {
     }
   };
 
+  const fetchCloudStatus = async () => {
+    try {
+      const res = await api.get("/settings/cloud-status");
+      if (res.data) setCloudStatus(res.data);
+    } catch (e) {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     loadSettings();
+    fetchCloudStatus();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -74,6 +88,33 @@ export default function Settings() {
       toast.error("Gagal menyimpan pengaturan: " + (err.response?.data?.message || err.message));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Upload Backup Direct to AWS S3 Cloud
+  const handleUploadBackupToS3 = async () => {
+    setUploadingS3(true);
+    try {
+      const res = await api.post("/settings/backup/s3");
+      toast.success(res.data.message || "Cadangan berhasil diunggah ke AWS S3!");
+    } catch (err: any) {
+      toast.error("Gagal mengunggah ke AWS S3: " + (err.response?.data?.message || err.message));
+    } finally {
+      setUploadingS3(false);
+    }
+  };
+
+  // Test S3 Connection
+  const handleTestS3 = async () => {
+    setTestingS3(true);
+    try {
+      const res = await api.post("/upload/test-s3");
+      toast.success(res.data.message || "Koneksi AWS S3 Berhasil!");
+      fetchCloudStatus();
+    } catch (err: any) {
+      toast.error("Koneksi AWS S3 Gagal: " + (err.response?.data?.message || err.message));
+    } finally {
+      setTestingS3(false);
     }
   };
 
@@ -369,6 +410,78 @@ export default function Settings() {
                         </div>
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* 4. Integrasi AWS Cloud & S3 Storage */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Cloud size={16} className="text-blue-600" />
+                        Integrasi AWS Cloud & S3 Storage
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Penyimpanan cloud terdistribusi untuk foto produk, dokumen surat jalan, dan auto-backup.
+                      </p>
+                    </div>
+
+                    {/* Cloud Status Badge */}
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                        cloudStatus?.configured
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          : "bg-amber-100 text-amber-800 border border-amber-200"
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${cloudStatus?.configured ? "bg-emerald-600 animate-pulse" : "bg-amber-600"}`}></span>
+                        {cloudStatus?.configured ? "AWS S3 Terhubung" : "Penyimpanan Lokal (Fallback)"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cloud Details Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Storage Provider</span>
+                      <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
+                        <Server size={13} className="text-blue-600" /> {cloudStatus?.provider || "Amazon Web Services"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">S3 Bucket Name</span>
+                      <span className="font-bold text-slate-800 font-mono text-[11px] truncate block mt-0.5">
+                        {cloudStatus?.bucket || "Belum Dikonfigurasi"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">AWS Region</span>
+                      <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
+                        <Radio size={13} className="text-emerald-600" /> {cloudStatus?.region || "ap-southeast-1"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleUploadBackupToS3}
+                      disabled={uploadingS3}
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition disabled:opacity-50"
+                    >
+                      <Cloud size={15} />
+                      {uploadingS3 ? "Mengunggah ke S3..." : "Upload Backup ke AWS S3"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestS3}
+                      disabled={testingS3}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition disabled:opacity-50"
+                    >
+                      <ShieldCheck size={15} />
+                      {testingS3 ? "Menguji..." : "Uji Koneksi AWS S3"}
+                    </button>
                   </div>
                 </div>
 

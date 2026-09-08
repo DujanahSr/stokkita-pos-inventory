@@ -156,7 +156,36 @@ export default function Navbar({ title }: NavbarProps) {
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between pl-16 lg:pl-6 pr-6 sticky top-0 z-30 shadow-sm">
-      <h1 className="text-base font-bold text-slate-800 tracking-tight">{title}</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-base font-bold text-slate-800 tracking-tight">{title}</h1>
+        {user?.impersonated_by && (
+          <div className="hidden sm:flex items-center gap-2 bg-amber-100/80 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold shadow-2xs">
+            <span className="animate-pulse">🛡️</span>
+            <span>Mode Bantuan Toko</span>
+            <button
+              type="button"
+              onClick={() => {
+                const originalToken = localStorage.getItem("superadmin_original_token");
+                const originalUser = localStorage.getItem("superadmin_original_user");
+                if (originalToken && originalUser) {
+                  localStorage.setItem("token", originalToken);
+                  localStorage.setItem("umkm_user", originalUser);
+                  localStorage.removeItem("superadmin_original_token");
+                  localStorage.removeItem("superadmin_original_user");
+                  api.defaults.headers.common.Authorization = `Bearer ${originalToken}`;
+                  toast.success("Berhasil kembali ke Portal Superadmin!");
+                  window.location.href = "/superadmin";
+                } else {
+                  window.location.href = "/login";
+                }
+              }}
+              className="ml-1 px-2 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold transition cursor-pointer active:scale-95"
+            >
+              Kembali ke Superadmin
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-2.5">
         {/* User Profile Quick Tag & Change Password */}

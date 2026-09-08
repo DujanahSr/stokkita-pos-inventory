@@ -16,8 +16,15 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(form.email, form.password);
-      navigate("/");
+      const res = await login(form.email, form.password);
+      const role = res?.user?.role?.toLowerCase();
+      if (role === "superadmin") {
+        navigate("/superadmin");
+      } else if (role === "kasir") {
+        navigate("/transaksi");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Login gagal");
     } finally {

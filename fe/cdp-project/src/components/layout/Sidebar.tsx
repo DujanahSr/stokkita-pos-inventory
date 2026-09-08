@@ -162,6 +162,46 @@ export default function Sidebar() {
         </nav>
 
         <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
+          {user?.impersonated_by && (
+            <div className="mb-2.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs">
+              <p className="font-bold flex items-center gap-1">
+                <span>🛡️</span> Mode Bantuan Toko
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const originalToken = localStorage.getItem("superadmin_original_token");
+                  const originalUser = localStorage.getItem("superadmin_original_user");
+                  if (originalToken && originalUser) {
+                    localStorage.setItem("token", originalToken);
+                    localStorage.setItem("umkm_user", originalUser);
+                    localStorage.removeItem("superadmin_original_token");
+                    localStorage.removeItem("superadmin_original_user");
+                    api.defaults.headers.common.Authorization = `Bearer ${originalToken}`;
+                    toast.success("Berhasil kembali ke Portal Superadmin!");
+                    window.location.href = "/superadmin";
+                  } else {
+                    toast.info("Kembali ke login Superadmin...");
+                    window.location.href = "/login";
+                  }
+                }}
+                className="mt-1.5 w-full py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition shadow-xs cursor-pointer active:scale-95"
+              >
+                ← Kembali ke Superadmin
+              </button>
+            </div>
+          )}
+
+          {user?.role?.toLowerCase() === "superadmin" && (
+            <NavLink
+              to="/superadmin"
+              className="mb-2.5 flex items-center justify-center gap-1.5 w-full py-1.5 rounded-xl bg-slate-900 text-emerald-400 font-bold text-xs hover:bg-slate-800 transition"
+            >
+              <ShieldCheck size={14} />
+              <span>Portal Superadmin</span>
+            </NavLink>
+          )}
+
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-bold text-emerald-700">

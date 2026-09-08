@@ -3,19 +3,19 @@ import {
   Tooltip, ResponsiveContainer
 } from "recharts";
 
-const fmt = (v) =>
-  new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(v);
+const fmt = (v: any) =>
+  new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 }).format(Number(v) || 0);
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr: any) => {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
+  const d = new Date(String(dateStr));
   return d.toLocaleDateString("id-ID", { day: '2-digit', month: 'short' });
 };
 
-export default function SalesChart({ data }) {
+export default function SalesChart({ data }: { data?: any[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+      <AreaChart data={data || []} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
@@ -30,8 +30,8 @@ export default function SalesChart({ data }) {
         <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={formatDate} />
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={fmt} width={50} />
         <Tooltip
-          formatter={(v, name) => ["Rp " + new Intl.NumberFormat("id-ID").format(v), name === 'total' ? 'Omzet' : 'Laba Kotor']}
-          labelFormatter={(l) => "Tgl: " + (l ? new Date(l).toLocaleDateString("id-ID", { day: '2-digit', month: 'long', year: 'numeric' }) : '')}
+          formatter={(v: any, name: any) => ["Rp " + new Intl.NumberFormat("id-ID").format(Number(v) || 0), name === 'total' ? 'Omzet' : 'Laba Kotor']}
+          labelFormatter={(l: any) => "Tgl: " + (l ? new Date(String(l)).toLocaleDateString("id-ID", { day: '2-digit', month: 'long', year: 'numeric' }) : '')}
           contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
         />
         <Area 

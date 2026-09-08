@@ -1,33 +1,38 @@
-# === TAHAP 1: Proses Build ===
-FROM node:20-alpine AS builder
+# Multi-stage Dockerfile for Frontend (React & Vite)
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
 RUN npm install -g pnpm
 
-# Copy package files dan install dependencies
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm config set ignore-scripts true
-RUN pnpm install --frozen-lockfile
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN echo "enable-pre-post-scripts=true" > .npmrc && \
+    echo "strict-peer-dependencies=false" >> .npmrc && \
+    pnpm install --no-frozen-lockfile
 
-# Copy seluruh kode frontend (termasuk .env)
 COPY . .
-
-# Build aplikasi untuk production
 RUN pnpm run build
 
-# === TAHAP 2: Serve dengan Nginx ===
+# Nginx Production Stage
 FROM nginx:alpine
 
-# Hapus konfigurasi default bawaan Nginx
-RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy konfigurasi custom Nginx yang baru saja kita buat
-COPY nginx.conf /etc/nginx/conf.d/
-
-# Copy hasil build dari "TAHAP 1" (folder dist) ke folder HTML Nginx
+# Copy built frontend assets
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# SPA fallback configuration
+RUN echo 'server { \
+    listen 80; \
+    server_name _; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ { \
+        expires 1y; \
+        add_header Cache-Control "public, no-transform"; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
