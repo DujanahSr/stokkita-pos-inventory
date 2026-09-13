@@ -97,6 +97,11 @@ app.post("/api/omnichannel/webhook", authenticateJWT, (req, res) => {
     res.json({ message: "Pesanan diterima dan masuk antrean pemrosesan" });
 });
 
+// Root endpoint
+app.get("/", (req, res) => {
+  res.json({ message: "StokKita POS & Inventory API is running", status: "healthy" });
+});
+
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
@@ -111,4 +116,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Jalankan standalone server jika bukan di lingkungan serverless (Vercel) & bukan test
+if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
+
