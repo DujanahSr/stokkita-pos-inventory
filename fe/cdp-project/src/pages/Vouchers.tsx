@@ -3,13 +3,16 @@ import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
 import Modal from "../components/ui/Modal";
 import api from "../api/axios";
+import footwearLuxuryBg from "../assets/footwear_luxury_bg.jpg";
 import { toast } from "sonner";
-import { 
-  Ticket, Plus, Trash2, Tag, Calendar, Percent, 
-  DollarSign, CheckCircle2, AlertCircle, Sparkles, Search 
-} from "lucide-react";
+import { Ticket, Plus, Trash2, Search } from "lucide-react";
 
 const fmt = (v: number) => "Rp " + new Intl.NumberFormat("id-ID").format(v || 0);
+
+const INPUT_CLS = "w-full px-3 py-2 bg-[#060a14] border border-[#c5a059]/30 rounded-xl text-xs font-mono text-slate-100 placeholder-slate-500 focus:border-[#c5a059] outline-none transition";
+const LABEL_CLS = "block text-[10px] font-mono text-[#e5c483] uppercase tracking-wider mb-1";
+const BTN_GOLD = "px-3.5 py-2 bg-gradient-to-r from-[#c5a059] via-[#dfba73] to-[#c5a059] text-[#070b14] font-serif-luxury font-bold text-xs uppercase tracking-wider rounded-xl hover:brightness-110 transition shadow-lg shadow-[#c5a059]/20 flex items-center justify-center gap-1.5";
+const BTN_DARK = "px-3.5 py-2 bg-[#090e1c]/70 hover:bg-[#141d33] border border-[#c5a059]/30 text-slate-200 hover:text-[#e5c483] rounded-xl text-xs font-mono transition flex items-center justify-center gap-1.5";
 
 export default function Vouchers() {
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -34,7 +37,7 @@ export default function Vouchers() {
       const res = await api.get("/vouchers");
       setVouchers(res.data);
     } catch (err: any) {
-      toast.error("Gagal memuat daftar voucher: " + (err.response?.data?.message || err.message));
+      toast.error("Gagal memuat voucher: " + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -46,14 +49,11 @@ export default function Vouchers() {
 
   const handleCreateVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.code.trim()) {
-      toast.warning("Kode voucher wajib diisi!");
-      return;
-    }
+    if (!form.code.trim()) return toast.warning("Kode voucher wajib diisi!");
     setSaving(true);
     try {
       const res = await api.post("/vouchers", form);
-      toast.success(res.data.message || "Voucher berhasil dibuat!");
+      toast.success(res.data.message || "Voucher berhasil diterbitkan!");
       setIsModalOpen(false);
       setForm({
         code: "",
@@ -74,7 +74,6 @@ export default function Vouchers() {
 
   const handleDeleteVoucher = (id: string, code: string) => {
     toast.error(`Hapus voucher promo "${code}"?`, {
-      description: "Voucher ini tidak akan bisa digunakan lagi oleh kasir.",
       action: {
         label: "Hapus",
         onClick: async () => {
@@ -87,10 +86,7 @@ export default function Vouchers() {
           }
         }
       },
-      cancel: {
-        label: "Batal",
-        onClick: () => {}
-      }
+      cancel: { label: "Batal", onClick: () => {} }
     });
   };
 
@@ -99,85 +95,106 @@ export default function Vouchers() {
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-[#070b14] text-slate-100 font-sans-pos relative selection:bg-[#c5a059]/30 selection:text-[#f8fafc]">
+      {/* Atelier Background & Vignette */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center pointer-events-none opacity-100 z-0"
+        style={{
+          backgroundImage: `url(${footwearLuxuryBg})`,
+          backgroundPosition: "center 20%",
+          backgroundSize: "cover",
+          backgroundRepeat: "no-repeat"
+        }}
+      />
+      <div 
+        className="fixed inset-0 pointer-events-none z-0" 
+        style={{
+          background: "radial-gradient(ellipse at 50% 35%, rgba(7, 11, 20, 0.12) 0%, rgba(7, 11, 20, 0.40) 65%, rgba(7, 11, 20, 0.72) 100%)"
+        }}
+      />
+
       <Sidebar />
-      <div className="flex-1 lg:ml-60 ml-0 min-w-0 flex flex-col">
+
+      <div className="flex-1 lg:ml-60 ml-0 min-w-0 flex flex-col h-screen overflow-hidden relative z-10 border-l border-r border-[#1e2538]/70">
         <Navbar title="Manajemen Kupon & Promo" />
-        <main className="flex-1 p-6 overflow-y-auto">
-          <div className="max-w-7xl mx-auto space-y-6">
 
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h1 className="text-3xl font-bold flex items-center gap-2 text-slate-800">
-                  <Ticket className="text-emerald-600" size={32} />
-                  Kupon & Voucher Diskon
-                </h1>
-                <p className="text-slate-500 mt-1">Buat kode voucher promo untuk promosi toko dan kasir POS</p>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+          {/* Header Banner */}
+          <div className="bg-[#070c17]/30 backdrop-blur-xl border border-[#c5a059]/35 rounded-3xl p-5 sm:p-6 shadow-[0_15px_40px_rgba(0,0,0,0.5)] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-[#e5c483] text-xs font-serif-luxury tracking-widest uppercase">
+                <Ticket size={16} /> Exclusive Privileges & Promos
               </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 transition shadow-sm"
-                >
-                  <Plus size={16} /> Buat Voucher Baru
-                </button>
-              </div>
+              <h1 className="text-2xl sm:text-3xl font-serif-luxury font-bold text-slate-100 mt-1">
+                Kupon Diskon & Voucher Promo
+              </h1>
+              <p className="text-slate-400 text-xs font-mono mt-1">
+                Penerbitan kode promo eksklusif untuk promosi toko dan kasir POS.
+              </p>
             </div>
 
-            {/* Search Bar */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-              <Search className="text-slate-400" size={18} />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Cari kode voucher..."
-                className="w-full text-sm outline-none text-slate-800"
-              />
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className={BTN_GOLD}
+            >
+              <Plus size={15} /> Buat Kupon Baru
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="bg-[#070c17]/30 backdrop-blur-xl border border-[#c5a059]/35 rounded-2xl p-4 shadow-[0_15px_30px_rgba(0,0,0,0.4)] flex items-center gap-3">
+            <Search className="text-[#c5a059]" size={16} />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cari kode kupon..."
+              className="bg-transparent w-full text-xs font-mono text-slate-100 placeholder-slate-500 outline-none"
+            />
+          </div>
+
+          {/* Voucher Cards Grid */}
+          {loading ? (
+            <div className="bg-[#070c17]/30 backdrop-blur-xl border border-[#c5a059]/35 rounded-3xl p-16 text-center text-slate-400 font-mono text-xs">
+              Memuat katalog voucher...
             </div>
+          ) : filteredVouchers.length === 0 ? (
+            <div className="bg-[#070c17]/30 backdrop-blur-xl border border-[#c5a059]/35 rounded-3xl p-16 text-center text-slate-400 font-mono text-xs space-y-2">
+              <Ticket className="mx-auto text-[#c5a059]/50 mb-2" size={40} />
+              <p className="font-bold text-slate-200">Belum ada voucher diskon</p>
+              <p className="text-[11px] text-slate-500">Klik tombol "+ Buat Kupon Baru" untuk menambah promo</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredVouchers.map(v => {
+                const isExpired = v.valid_until && new Date(v.valid_until) < new Date();
+                const isQuotaExceeded = v.quota > 0 && v.used_count >= v.quota;
 
-            {/* Voucher Cards Grid */}
-            {loading ? (
-              <div className="py-12 text-center text-slate-400">Memuat daftar voucher...</div>
-            ) : filteredVouchers.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
-                <Ticket className="mx-auto text-slate-300 mb-3" size={48} />
-                <p className="font-bold text-slate-700">Belum ada voucher diskon</p>
-                <p className="text-xs text-slate-400 mt-1">Klik tombol "+ Buat Voucher Baru" di atas untuk menambah kupon promo</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredVouchers.map(v => {
-                  const isExpired = v.valid_until && new Date(v.valid_until) < new Date();
-                  const isQuotaExceeded = v.quota > 0 && v.used_count >= v.quota;
-
-                  return (
-                    <div 
-                      key={v.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden"
-                    >
-                      {/* Top Banner Tag */}
+                return (
+                  <div 
+                    key={v.id}
+                    className="bg-[#070c17]/30 backdrop-blur-xl border border-[#c5a059]/35 hover:border-[#c5a059]/60 rounded-3xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col justify-between transition"
+                  >
+                    <div>
                       <div className="flex justify-between items-start gap-2 mb-3">
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-black text-lg text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 tracking-wider">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-base text-[#e5c483] bg-[#060a14] px-3 py-1 rounded-xl border border-[#c5a059]/40 tracking-wider">
                               {v.code}
                             </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${
                               isExpired 
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-rose-950/60 text-rose-300 border border-rose-500/40"
                                 : isQuotaExceeded
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-emerald-100 text-emerald-800"
+                                ? "bg-amber-950/60 text-amber-300 border border-amber-500/40"
+                                : "bg-emerald-950/60 text-emerald-300 border border-emerald-500/40"
                             }`}>
                               {isExpired ? "Kedaluwarsa" : isQuotaExceeded ? "Kuota Habis" : "Aktif"}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500 mt-1.5 font-medium">
-                            Diskon: <strong className="text-slate-800">{v.type === 'PERCENT' ? `${v.discount_value}%` : fmt(v.discount_value)}</strong>
+                          <p className="text-xs font-mono text-slate-300 mt-2">
+                            Diskon: <strong className="text-[#e5c483]">{v.type === 'PERCENT' ? `${v.discount_value}%` : fmt(v.discount_value)}</strong>
                             {v.type === 'PERCENT' && v.max_discount > 0 && ` (Maks. ${fmt(v.max_discount)})`}
                           </p>
                         </div>
@@ -185,63 +202,61 @@ export default function Vouchers() {
                         <button
                           type="button"
                           onClick={() => handleDeleteVoucher(v.id, v.code)}
-                          className="text-slate-400 hover:text-red-600 p-1 rounded-lg transition"
+                          className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-950/40 transition"
                           title="Hapus voucher"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
 
-                      {/* Terms & Usage */}
-                      <div className="space-y-1.5 py-3 border-t border-slate-100 text-xs text-slate-600">
+                      <div className="space-y-1.5 py-3 border-t border-[#c5a059]/15 text-xs font-mono text-slate-300">
                         <div className="flex justify-between">
-                          <span>Min. Belanja:</span>
-                          <strong className="text-slate-800">{v.min_spend > 0 ? fmt(v.min_spend) : 'Tanpa Syarat'}</strong>
+                          <span className="text-slate-400">Min. Belanja:</span>
+                          <strong className="text-slate-100">{v.min_spend > 0 ? fmt(v.min_spend) : 'Tanpa Syarat'}</strong>
                         </div>
                         <div className="flex justify-between">
-                          <span>Terpakai:</span>
-                          <span className="font-semibold text-slate-700">{v.used_count} / {v.quota > 0 ? `${v.quota} kali` : 'Unlimited'}</span>
+                          <span className="text-slate-400">Terpakai:</span>
+                          <span className="font-bold text-[#e5c483]">{v.used_count} / {v.quota > 0 ? `${v.quota} kali` : 'Unlimited'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Masa Berlaku:</span>
-                          <span className="text-slate-700">
+                          <span className="text-slate-400">Masa Berlaku:</span>
+                          <span className="text-slate-300">
                             {v.valid_until ? new Date(v.valid_until).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : 'Selamanya'}
                           </span>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </main>
       </div>
 
       {/* Modal Buat Voucher */}
       {isModalOpen && (
-        <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title="Buat Voucher Promo Baru">
-          <form onSubmit={handleCreateVoucher} className="space-y-4">
+        <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title="Penerbitan Kupon Promo Baru">
+          <form onSubmit={handleCreateVoucher} className="space-y-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Kode Voucher (Huruf Besar & Angka)</label>
+              <label className={LABEL_CLS}>Kode Kupon (Huruf Besar & Angka)</label>
               <input
                 type="text"
                 required
                 value={form.code}
                 onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                placeholder="Misal: PROMOSEPATU10"
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-mono font-bold uppercase text-sm"
+                placeholder="Misal: ATELIER10"
+                className={`${INPUT_CLS} uppercase font-bold tracking-widest`}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tipe Diskon</label>
+                <label className={LABEL_CLS}>Tipe Diskon</label>
                 <select
                   value={form.type}
                   onChange={e => setForm({ ...form, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                  className={INPUT_CLS}
                 >
                   <option value="PERCENT">Persentase (%)</option>
                   <option value="FIXED">Nominal Tetap (Rp)</option>
@@ -249,7 +264,7 @@ export default function Vouchers() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className={LABEL_CLS}>
                   {form.type === "PERCENT" ? "Nilai Diskon (%)" : "Nominal Diskon (Rp)"}
                 </label>
                 <input
@@ -258,73 +273,65 @@ export default function Vouchers() {
                   min="1"
                   value={form.discount_value}
                   onChange={e => setForm({ ...form, discount_value: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-bold"
+                  className={INPUT_CLS}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Minimal Belanja (Rp)</label>
+                <label className={LABEL_CLS}>Minimal Belanja (Rp)</label>
                 <input
                   type="number"
                   min="0"
                   value={form.min_spend}
                   onChange={e => setForm({ ...form, min_spend: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                  className={INPUT_CLS}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Maksimal Diskon (Rp)</label>
+                <label className={LABEL_CLS}>Maksimal Diskon (Rp)</label>
                 <input
                   type="number"
                   min="0"
                   value={form.max_discount}
                   onChange={e => setForm({ ...form, max_discount: Number(e.target.value) })}
                   placeholder="0 jika tanpa batas"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                  className={INPUT_CLS}
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Kuota Penggunaan</label>
+                <label className={LABEL_CLS}>Kuota Penggunaan</label>
                 <input
                   type="number"
                   min="1"
                   value={form.quota}
                   onChange={e => setForm({ ...form, quota: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                  className={INPUT_CLS}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Berlaku Sampai Tanggal</label>
+                <label className={LABEL_CLS}>Berlaku Sampai Tanggal</label>
                 <input
                   type="date"
                   value={form.valid_until}
                   onChange={e => setForm({ ...form, valid_until: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                  className={INPUT_CLS}
                 />
               </div>
             </div>
 
-            <div className="pt-3 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium transition"
-              >
+            <div className="pt-2 flex gap-2">
+              <button type="button" onClick={() => setIsModalOpen(false)} className={`flex-1 ${BTN_DARK}`}>
                 Batal
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl font-medium transition disabled:opacity-50"
-              >
-                {saving ? "Menyimpan..." : "Buat Voucher"}
+              <button type="submit" disabled={saving} className={`flex-1 ${BTN_GOLD}`}>
+                {saving ? "Menyimpan..." : "Terbitkan Kupon"}
               </button>
             </div>
           </form>

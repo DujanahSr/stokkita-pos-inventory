@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Eye, EyeOff, ShoppingBag, TrendingUp, Package, Users } from "lucide-react";
+import { 
+  Eye, EyeOff, Lock, Store, ShieldCheck, 
+  ArrowRight, Sparkles, Layers, CheckCircle2
+} from "lucide-react";
+import footwearAtelierLogin from "../assets/footwear_atelier_login.jpg";
+import shoeLuxuryEmblem from "../assets/shoe_luxury_emblem.jpg";
 
 export default function Login() {
   const { login } = useAuth();
@@ -11,7 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -25,317 +30,215 @@ export default function Login() {
       } else {
         navigate("/");
       }
-    } catch (err) {
-      setError(err.response?.data?.message || "Login gagal");
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Email atau password yang Anda masukkan tidak sesuai");
     } finally {
       setLoading(false);
     }
   };
 
-  const features = [
-    { icon: Package, title: "Manajemen Stok", desc: "Kelola inventaris sepatu dengan mudah" },
-    { icon: TrendingUp, title: "Analisis Penjualan", desc: "Pantau performa bisnis real-time" },
-    { icon: Users, title: "Multi Pengguna", desc: "Kolaborasi tim yang efisien" },
-  ];
-
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Soft Dark Red Theme */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 relative overflow-hidden">
-        {/* Background Image - Tema Sepatu Profesional */}
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=2070&auto=format&fit=crop')`,
-          }}
-        />
+    <div className="min-h-screen bg-[#050811] text-slate-100 flex items-center justify-center p-3 sm:p-6 lg:p-10 relative overflow-hidden font-sans select-none">
+      {/* Background Architectural Ambience */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center pointer-events-none opacity-40 blur-2xl scale-110"
+        style={{ backgroundImage: `url(${footwearAtelierLogin})` }}
+      />
+      <div className="fixed inset-0 bg-gradient-to-t from-[#050811] via-[#050811]/90 to-[#050811]/70 pointer-events-none" />
 
-        {/* Gradient Overlay - Lebih gelap dan elegan */}
-        <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/70 to-amber-950/60" />
+      {/* Main Master Console Frame */}
+      <div className="w-full max-w-[1360px] min-h-[680px] rounded-3xl border border-[#1e2538] bg-[#070c17]/90 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.8)] grid grid-cols-1 lg:grid-cols-12 overflow-hidden relative z-10">
+        
+        {/* SISI KIRI: HERO ATELIER & EDITORIAL SHOWCASE (7 COLS) */}
+        <div className="lg:col-span-7 xl:col-span-7 relative p-8 sm:p-10 lg:p-12 flex flex-col justify-between overflow-hidden border-b lg:border-b-0 lg:border-r border-[#1e2538]/80">
+          
+          {/* Master Footwear Photograph Background */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 hover:scale-105"
+            style={{ 
+              backgroundImage: `url(${footwearAtelierLogin})`,
+              backgroundPosition: "center 40%" 
+            }}
+          />
+          {/* Dark Glass Scrim to Guarantee Readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#070c17] via-[#070c17]/75 to-[#070c17]/40 pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-[#c5a059]/15 via-transparent to-transparent pointer-events-none" />
 
-        {/* Content */}
-        <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20">
-              <ShoppingBag className="w-6 h-6 text-amber-400" />
+          {/* Top Atelier Brand Crest */}
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl border border-[#c5a059]/50 bg-[#070c17]/80 backdrop-blur-md flex items-center justify-center shadow-[0_0_18px_rgba(197,160,89,0.25)] ring-1 ring-[#c5a059]/20">
+                <Store className="w-5 h-5 text-[#e5c483]" />
+              </div>
+              <div>
+                <h1 className="font-serif-luxury text-lg font-bold tracking-[0.16em] text-[#e5c483] leading-none uppercase">
+                  StokKita
+                </h1>
+                <p className="text-[10px] font-mono tracking-[0.24em] uppercase text-slate-400 mt-1">
+                  Haute Footwear Atelier & POS
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">StokKita</h1>
-              <p className="text-xs text-white/60">Premium Shoe Management</p>
-            </div>
-          </div>
 
-          {/* Main Content - Diperpendek */}
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-                Temukan Gaya Anda<br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
-                  di Toko Kami
-                </span>
-              </h2>
-              <p className="text-lg text-white/80 max-w-md leading-relaxed">
-                Kelola stok sepatu, penjualan, dan bisnis UMKM Anda dengan lebih profesional.
-              </p>
-            </div>
-
-            {/* Features */}
-            <div className="space-y-4">
-              {features.map((feature, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition-all duration-300"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
-                    <feature.icon className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">{feature.title}</h3>
-                    <p className="text-white/60 text-sm">{feature.desc}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-[#070c17]/80 border border-[#c5a059]/30 backdrop-blur-md text-[11px] font-mono text-[#e5c483]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              <span>Sistem Aktif & Terenkripsi</span>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center gap-6">
-            <div className="flex -space-x-2">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 border-2 border-white/20 flex items-center justify-center text-xs font-bold text-white"
-                >
-                  {i}
-                </div>
-              ))}
+          {/* Center Editorial Headlines */}
+          <div className="relative z-10 my-10 lg:my-14 max-w-xl space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#181308]/90 border border-[#c5a059]/40 text-[#e5c483] text-[10px] font-mono tracking-widest uppercase">
+              <Sparkles size={11} className="text-[#c5a059]" />
+              <span>Platform Manajemen Sepatu Presisi B2B</span>
             </div>
-            <p className="text-sm text-white/70">
-              <span className="text-white font-semibold">500+</span> UMKM sepatu telah bergabung
+
+            <h2 className="text-3xl sm:text-4xl xl:text-5xl font-serif-luxury font-bold text-slate-100 leading-tight tracking-tight">
+              Seni Kerajinan & Presisi Manajemen{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#e5c483] via-[#c5a059] to-[#dfba73]">
+                Alas Kaki Modern
+              </span>
+            </h2>
+
+            <p className="text-sm sm:text-base text-slate-300 font-sans leading-relaxed">
+              Arsitektur terpadu untuk pengawasan stok multi-cabang, formulasi teknik industri EOQ & ROP otomatis, serta terminal kasir berkecepatan tinggi.
             </p>
+          </div>
+
+          {/* Bottom Features Ribbon - 3 Architectural Columns */}
+          <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 border-t border-[#1e2538]/80 bg-[#070c17]/60 backdrop-blur-md -mx-8 -mb-8 p-6 sm:-mx-10 sm:-mb-10 sm:p-8 lg:-mx-12 lg:-mb-12 lg:p-8">
+            <div className="p-3 rounded-xl border border-[#1e2538] bg-[#0a101f]/60 space-y-1">
+              <span className="font-mono text-[11px] text-[#c5a059] font-bold">01 / MULTI-CABANG</span>
+              <p className="text-xs text-slate-200 font-medium">Sinkronisasi Stok Instan</p>
+              <p className="text-[10px] text-slate-400">Mutasi & ketersediaan real-time antar gudang</p>
+            </div>
+
+            <div className="p-3 rounded-xl border border-[#1e2538] bg-[#0a101f]/60 space-y-1">
+              <span className="font-mono text-[11px] text-[#c5a059] font-bold">02 / POS ATELIER</span>
+              <p className="text-xs text-slate-200 font-medium">Kasir Kilat & Barcode</p>
+              <p className="text-[10px] text-slate-400">Shift laci, retur struk & parkir antrean</p>
+            </div>
+
+            <div className="p-3 rounded-xl border border-[#1e2538] bg-[#0a101f]/60 space-y-1">
+              <span className="font-mono text-[11px] text-[#c5a059] font-bold">03 / BUFFER CERDAS</span>
+              <p className="text-xs text-slate-200 font-medium">EOQ & ROP Otomatis</p>
+              <p className="text-[10px] text-slate-400">Pencegahan kehabisan stok & margin laba</p>
+            </div>
           </div>
         </div>
-      </div>
 
-
-      {/* Right Side - Soft Dark Transparent */}
-      {/* Right Side */}
-      <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-6 sm:p-12 bg-gradient-to-br from-slate-950 via-rose-950/80 to-black">
-        <div className="w-full max-w-md">
-
-          {/* Mobile Logo */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 mb-4">
-              <ShoppingBag className="w-7 h-7 text-amber-400" />
-            </div>
-
-            <h1 className="text-2xl font-bold text-white">
-              StokKita
-            </h1>
-
-            <p className="text-white/60 text-sm mt-1">
-              Premium Shoe Management
-            </p>
-          </div>
-
-          {/* Login Card */}
-          <div
-            className="
-      bg-white/[0.06]
-      backdrop-blur-3xl
-      border border-white/10
-      rounded-3xl
-      p-8 lg:p-10
-      shadow-[0_20px_60px_rgba(0,0,0,0.5)]
-    "
-          >
-            {/* Header */}
-            <div className="mb-8">
-
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-4">
-                <ShoppingBag className="w-4 h-4 text-amber-400" />
-                <span className="text-xs text-white/60">
-                  Sistem Manajemen UMKM Sepatu
-                </span>
+        {/* SISI KANAN: TERMINAL ACCESS CONSOLE (5 COLS) */}
+        <div className="lg:col-span-5 xl:col-span-5 p-8 sm:p-10 lg:p-12 flex flex-col justify-between bg-[#070b14]/95 backdrop-blur-3xl relative">
+          
+          {/* Top Console Heading */}
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#141d33] border border-[#c5a059]/40 text-[#e5c483] text-[10px] font-mono tracking-widest uppercase">
+                <Lock size={11} className="text-[#c5a059]" />
+                <span>Autentikasi Aman</span>
               </div>
-
-              <h2 className="text-3xl font-bold text-white">
-                Selamat <span className="text-amber-400">Datang</span>
-              </h2>
-
-              <p className="text-white/70 mt-2">
-                Masuk ke akun Anda untuk melanjutkan
-              </p>
+              <span className="text-[10px] font-mono text-slate-500">v2.4 Enterprise</span>
             </div>
 
-            {/* Error */}
+            <h3 className="text-2xl sm:text-3xl font-serif-luxury font-bold text-slate-100 tracking-tight">
+              Akses Terminal
+            </h3>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed font-sans">
+              Masukkan identitas akun resmi untuk membuka konsol kerja atelier toko Anda.
+            </p>
+
+            {/* Error Banner */}
             {error && (
-              <div className="mb-6 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
-                {error}
+              <div className="mt-5 p-3 rounded-xl bg-[#250d12] border border-rose-600/50 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in duration-200">
+                <div className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0" />
+                <span className="font-mono">{error}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-
-              {/* Email */}
+            {/* Credentials Form (Secure & Empty by Default) */}
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Email
+                <label className="block text-xs font-serif-luxury uppercase tracking-wider text-slate-300 mb-2 font-semibold">
+                  Alamat Email Terdaftar
                 </label>
-
                 <input
                   type="email"
                   placeholder="nama@email.com"
                   value={form.email}
-                  onChange={(e) =>
-                    setForm({ ...form, email: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                   required
-                  className="
-            w-full
-            px-5
-            py-3.5
-            bg-white/10
-            border
-            border-white/10
-            rounded-2xl
-            text-white
-            placeholder:text-white/50
-            focus:outline-none
-            focus:ring-2
-            focus:ring-amber-400
-            focus:border-transparent
-            transition-all
-            duration-300
-          "
+                  autoComplete="email"
+                  className="w-full px-4 py-3 bg-[#090e1c] border border-[#1e2538] rounded-xl text-xs font-mono text-slate-100 placeholder-slate-600 focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/50 outline-none transition shadow-inner"
                 />
               </div>
 
-              {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Password
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-serif-luxury uppercase tracking-wider text-slate-300 font-semibold">
+                    Kata Sandi (Password)
+                  </label>
+                </div>
 
                 <div className="relative">
                   <input
                     type={showPass ? "text" : "password"}
-                    placeholder="••••••••"
+                    placeholder="••••••••••••"
                     value={form.password}
-                    onChange={(e) =>
-                      setForm({ ...form, password: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
-                    className="
-              w-full
-              px-5
-              py-3.5
-              pr-12
-              bg-white/10
-              border
-              border-white/10
-              rounded-2xl
-              text-white
-              placeholder:text-white/50
-              focus:outline-none
-              focus:ring-2
-              focus:ring-amber-400
-              focus:border-transparent
-              transition-all
-              duration-300
-            "
+                    autoComplete="current-password"
+                    className="w-full px-4 py-3 pr-10 bg-[#090e1c] border border-[#1e2538] rounded-xl text-xs font-mono text-slate-100 placeholder-slate-600 focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/50 outline-none transition shadow-inner"
                   />
-
                   <button
                     type="button"
                     onClick={() => setShowPass(!showPass)}
-                    className="
-              absolute
-              right-5
-              top-1/2
-              -translate-y-1/2
-              text-white/50
-              hover:text-amber-400
-              transition-colors
-            "
+                    className="absolute right-3 top-2.5 text-slate-500 hover:text-[#e5c483] transition"
+                    aria-label="Toggle password"
                   >
-                    {showPass ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
+                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
 
-
-              {/* Login Button */}
+              {/* Sovereign Gold Action Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="
-          w-full
-          py-4
-          rounded-2xl
-          bg-gradient-to-r
-          from-red-700
-          via-red-600
-          to-red-700
-          border border-red-500/20
-          text-white
-          font-semibold
-          text-base
-          hover:brightness-110
-          transition-all
-          duration-300
-          shadow-lg
-          shadow-red-900/30
-          disabled:opacity-70
-        "
+                className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#c5a059] via-[#dfba73] to-[#c5a059] hover:brightness-110 active:scale-[0.99] text-[#070b14] font-serif-luxury text-xs sm:text-sm font-bold tracking-[0.14em] uppercase transition shadow-lg shadow-[#c5a059]/20 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Memproses...
+                  <span className="flex items-center gap-2 font-mono">
+                    <span className="w-4 h-4 border-2 border-[#070b14] border-t-transparent rounded-full animate-spin" />
+                    Memverifikasi Sesi...
                   </span>
                 ) : (
-                  "Masuk"
+                  <>
+                    <span>Buka Sesi Masuk</span>
+                    <ArrowRight size={14} />
+                  </>
                 )}
               </button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-white/70">
-              Belum punya akun UMKM?{" "}
-              <Link to="/register" className="text-amber-400 hover:text-amber-300 font-medium transition-colors">
-                Daftar sekarang
+            <div className="mt-5 text-center text-xs text-slate-400">
+              Ingin membuka toko sepatu baru?{" "}
+              <Link to="/register" className="text-[#e5c483] hover:text-[#f3d99d] font-semibold underline underline-offset-4 transition">
+                Daftar Merchant (Khusus Owner) →
               </Link>
             </div>
           </div>
 
-          {/* Footer */}
-          <p className="text-center text-white/40 text-xs mt-8">
-            © {new Date().getFullYear()} StokKita · Sistem Manajemen UMKM Sepatu
-          </p>
+          {/* Security Guarantee Footer */}
+          <div className="pt-6 mt-6 border-t border-[#1e2538]/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] font-mono text-slate-500">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-[#c5a059]" />
+              <span>256-Bit SSL • Isolasi Multi-Tenant</span>
+            </div>
+            <span>© {new Date().getFullYear()} StokKita Atelier</span>
+          </div>
 
         </div>
       </div>
     </div>
   );
-}
+}

@@ -83,7 +83,7 @@ export default function Sidebar() {
     <>
       <button
         type="button"
-        className="lg:hidden fixed top-4 left-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-emerald-600 shadow-sm transition hover:bg-slate-50"
+        className="lg:hidden fixed top-4 left-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#1e2538] bg-[#0b1120] text-[#e5c483] shadow-md transition hover:bg-[#141d33]"
         onClick={() => setOpen(true)}
         aria-label="Buka menu"
       >
@@ -91,46 +91,46 @@ export default function Sidebar() {
       </button>
 
       <div
-        className={`fixed inset-0 z-30 bg-slate-900/30 transition-opacity lg:hidden ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        className={`fixed inset-0 z-30 bg-black/75 transition-opacity lg:hidden ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={() => setOpen(false)}
       />
 
       <aside
-        className={`fixed left-0 top-0 z-40 h-full w-60 transform flex flex-col bg-white border-r border-slate-200 transition-transform duration-300 ${
+        className={`fixed left-0 top-0 z-40 h-full w-60 transform flex flex-col bg-[#070b14]/70 backdrop-blur-xl border-r border-[#1e2538]/70 transition-transform duration-300 ${
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-slate-100">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#1e2538]/70 bg-[#080d1a]/50 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
-              <Store className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full border border-[#c5a059]/40 bg-[#0d1424] flex items-center justify-center shadow-[0_0_12px_rgba(197,160,89,0.15)]">
+              <Store className="w-4 h-4 text-[#e5c483]" />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900 leading-tight">StokKita</p>
-              <p className="text-xs text-slate-500">Manajemen UMKM</p>
+              <p className="font-serif-luxury text-sm font-bold tracking-wider text-[#e5c483] leading-tight">STOKKITA</p>
+              <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-slate-500">FOOTWEAR ATELIER</p>
             </div>
           </div>
           <button
             type="button"
-            className="lg:hidden rounded-md p-2 text-slate-500 hover:bg-slate-100"
+            className="lg:hidden rounded-md p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#141d33]"
             onClick={() => setOpen(false)}
             aria-label="Tutup menu"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto min-h-0">
           {allNavItems.filter(item => !item.adminOnly || user?.role?.toLowerCase() === 'admin').map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === "/"}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
                   isActive
-                    ? "bg-emerald-50 text-emerald-700 font-bold"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-[#141d33] text-[#e5c483] border border-[#c5a059]/50 shadow-[0_0_10px_rgba(197,160,89,0.12)] font-semibold"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1424] border border-transparent"
                 }`
               }
             >
@@ -140,16 +140,17 @@ export default function Sidebar() {
           ))}
 
           {user?.role?.toLowerCase() === "admin" && (
-            <div className="mt-2 pt-2 border-t border-slate-100 space-y-0.5">
+            <div className="mt-3 pt-3 border-t border-[#1e2538] space-y-1">
+              <span className="px-3 text-[9px] font-mono tracking-[0.2em] uppercase text-slate-500 block mb-1">PENGATURAN TOKO</span>
               {adminItems.map(({ to, icon: Icon, label }) => (
                 <NavLink
                   key={to}
                   to={to}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                    `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
                       isActive
-                        ? "bg-emerald-50 text-emerald-700 font-bold"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        ? "bg-[#141d33] text-[#e5c483] border border-[#c5a059]/50 shadow-[0_0_10px_rgba(197,160,89,0.12)] font-semibold"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-[#0d1424] border border-transparent"
                     }`
                   }
                 >
@@ -161,9 +162,9 @@ export default function Sidebar() {
           )}
         </nav>
 
-        <div className="px-4 py-3 border-t border-slate-100 flex-shrink-0 bg-white">
+        <div className="px-4 py-3 border-t border-[#1e2538] flex-shrink-0 bg-[#080d1a]">
           {user?.impersonated_by && (
-            <div className="mb-2.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shadow-xs">
+            <div className="mb-2.5 p-2 rounded-xl bg-[#1a1408] border border-[#c5a059]/40 text-[#e5c483] text-xs">
               <p className="font-bold flex items-center gap-1">
                 <span>🛡️</span> Mode Bantuan Toko
               </p>
@@ -185,7 +186,7 @@ export default function Sidebar() {
                     window.location.href = "/login";
                   }
                 }}
-                className="mt-1.5 w-full py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition shadow-xs cursor-pointer active:scale-95"
+                className="mt-1.5 w-full py-1 rounded-lg bg-[#c5a059] hover:bg-[#dfba73] text-[#070b14] font-bold text-[10px] uppercase font-serif-luxury tracking-wider transition shadow-sm cursor-pointer"
               >
                 ← Kembali ke Superadmin
               </button>
@@ -195,29 +196,29 @@ export default function Sidebar() {
           {user?.role?.toLowerCase() === "superadmin" && (
             <NavLink
               to="/superadmin"
-              className="mb-2.5 flex items-center justify-center gap-1.5 w-full py-1.5 rounded-xl bg-slate-900 text-emerald-400 font-bold text-xs hover:bg-slate-800 transition"
+              className="mb-2.5 flex items-center justify-center gap-1.5 w-full py-1.5 rounded-xl bg-[#141d33] border border-[#c5a059]/40 text-[#e5c483] font-bold text-xs hover:bg-[#1a2542] transition"
             >
               <ShieldCheck size={14} />
               <span>Portal Superadmin</span>
             </NavLink>
           )}
 
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-emerald-700">
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <div className="w-7 h-7 rounded-full bg-[#141d33] border border-[#c5a059]/40 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-serif-luxury font-bold text-[#e5c483]">
                 {user?.nama?.[0]?.toUpperCase() || "U"}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-slate-800 truncate">{user?.nama}</p>
-              <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
+              <p className="text-xs font-medium text-slate-200 truncate">{user?.nama}</p>
+              <p className="text-[10px] font-mono text-slate-500 truncate">{user?.email}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleLogoutClick}
             disabled={loggingOut}
-            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono text-rose-300 bg-[#251216] hover:bg-[#381a1f] border border-rose-600/40 transition-colors disabled:opacity-50"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>{loggingOut ? "Memeriksa..." : "Keluar / Logout"}</span>

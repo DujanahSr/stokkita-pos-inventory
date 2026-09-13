@@ -4,7 +4,7 @@ import { connectRedis, clearCache } from "./redisClient.js";
 import { logAudit } from "./utils/auditLogger.js";
 import { createNotification } from "./utils/notificationHelper.js";
 
-async function processOrder(orderData: any) {
+export async function processOrder(orderData: any) {
     const client = await pool.connect();
     const startTime = Date.now();
     try {
@@ -137,4 +137,9 @@ async function startWorker() {
     }
 }
 
-startWorker();
+const isWorkerMain = process.argv[1] && (process.argv[1].endsWith("worker.js") || process.argv[1].endsWith("worker.ts"));
+if (isWorkerMain) {
+    startWorker();
+}
+
+export { startWorker };

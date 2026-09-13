@@ -29,12 +29,14 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/stokkita_db}
       - JWT_SECRET=${JWT_SECRET:-stokkita_jwt_secret_production_2026}
       - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://rabbitmq:5672
       - AWS_REGION=${AWS_REGION:-ap-southeast-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
     depends_on:
       - redis
+      - rabbitmq
     networks:
       - stokkita_network
 
@@ -56,6 +58,36 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    networks:
+      - stokkita_network
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: stokkita_rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - stokkita_network
+
+  # Background Worker (Consumer for online_orders_queue)
+  worker:
+    build:
+      context: ./be
+      dockerfile: Dockerfile
+    container_name: stokkita_worker
+    restart: always
+    command: ["node", "dist/api/worker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/stokkita_db}
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    depends_on:
+      - rabbitmq
+      - redis
     networks:
       - stokkita_network
 

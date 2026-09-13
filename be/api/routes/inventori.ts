@@ -50,6 +50,8 @@ router.get("/inventory/:warehouse_id", async (req: Request, res: Response) => {
       SELECT 
         i.id,
         p.name as product_name,
+        p.category,
+        p.image_url,
         v.sku,
         v.price_sell,
         v.id as variant_id,
@@ -284,6 +286,7 @@ router.get("/cross-branch-stock", async (req: Request, res: Response) => {
         p.id as product_id,
         p.name as product_name,
         p.category,
+        p.image_url,
         v.id as variant_id,
         v.sku,
         v.size,

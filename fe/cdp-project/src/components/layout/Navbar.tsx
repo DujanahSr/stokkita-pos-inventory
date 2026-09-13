@@ -8,9 +8,11 @@ import { toast } from "sonner";
 
 interface NavbarProps {
   title: string;
+  actions?: React.ReactNode;
+  centerContent?: React.ReactNode;
 }
 
-export default function Navbar({ title }: NavbarProps) {
+export default function Navbar({ title, actions, centerContent }: NavbarProps) {
   const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -155,11 +157,12 @@ export default function Navbar({ title }: NavbarProps) {
   };
 
   return (
-    <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between pl-16 lg:pl-6 pr-6 sticky top-0 z-30 shadow-sm">
+    <header className="h-14 bg-[#070b14]/40 backdrop-blur-xl border-b border-[#1e2538]/70 flex items-center justify-between pl-16 lg:pl-6 pr-6 sticky top-0 z-30 shadow-md">
       <div className="flex items-center gap-3">
-        <h1 className="text-base font-bold text-slate-800 tracking-tight">{title}</h1>
+        <h1 className="text-xs sm:text-sm font-serif-luxury tracking-[0.12em] uppercase text-slate-100 font-semibold truncate max-w-[150px] sm:max-w-none">{title}</h1>
+        {actions}
         {user?.impersonated_by && (
-          <div className="hidden sm:flex items-center gap-2 bg-amber-100/80 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-xl text-xs font-bold shadow-2xs">
+          <div className="hidden sm:flex items-center gap-2 bg-[#1a1408] text-[#e5c483] border border-[#c5a059]/50 px-2.5 py-1 rounded-xl text-xs font-serif-luxury tracking-wider shadow-sm">
             <span className="animate-pulse">🛡️</span>
             <span>Mode Bantuan Toko</span>
             <button
@@ -179,7 +182,7 @@ export default function Navbar({ title }: NavbarProps) {
                   window.location.href = "/login";
                 }
               }}
-              className="ml-1 px-2 py-0.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold transition cursor-pointer active:scale-95"
+              className="ml-1 px-2 py-0.5 rounded-lg bg-[#c5a059] hover:bg-[#dfba73] text-[#070b14] text-[10px] font-bold uppercase transition cursor-pointer"
             >
               Kembali ke Superadmin
             </button>
@@ -187,20 +190,26 @@ export default function Navbar({ title }: NavbarProps) {
         )}
       </div>
 
+      {centerContent && (
+        <div className="hidden md:flex items-center justify-center">
+          {centerContent}
+        </div>
+      )}
+
       <div className="flex items-center gap-2.5">
         {/* User Profile Quick Tag & Change Password */}
         <button
           type="button"
           onClick={() => setIsPasswordModalOpen(true)}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition"
+          className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#070b14] hover:bg-[#141d33] border border-[#1e2538] hover:border-[#c5a059]/50 text-xs text-slate-200 transition"
           title="Klik untuk ubah password akun Anda"
         >
-          <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px]">
+          <div className="w-5 h-5 rounded-full bg-[#141d33] border border-[#c5a059]/40 text-[#e5c483] flex items-center justify-center font-serif-luxury font-bold text-[10px]">
             {user?.nama?.charAt(0).toUpperCase() || 'U'}
           </div>
-          <span className="hidden sm:inline font-bold">{user?.nama || 'Pengguna'}</span>
-          <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-medium">{user?.role || 'Kasir'}</span>
-          <KeyRound size={13} className="text-slate-400" />
+          <span className="hidden sm:inline font-medium text-slate-200">{user?.nama || 'Pengguna'}</span>
+          <span className="text-[9px] font-mono tracking-wider uppercase bg-[#141d33] text-[#e5c483] border border-[#c5a059]/30 px-1.5 py-0.2 rounded font-medium">{user?.role || 'Kasir'}</span>
+          <KeyRound size={12} className="text-slate-500" />
         </button>
 
         {/* Notification Center Bell */}
@@ -208,12 +217,12 @@ export default function Navbar({ title }: NavbarProps) {
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition focus:outline-none"
+            className="relative p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-[#141d33] border border-transparent hover:border-[#1e2538] transition focus:outline-none"
             title="Pusat Notifikasi Real-Time"
           >
-            <Bell size={20} />
+            <Bell size={18} />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-5 h-5 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce shadow-md">
+              <span className="absolute top-1 right-1 w-4 h-4 bg-rose-600 text-white text-[9px] font-mono font-bold rounded-full flex items-center justify-center animate-bounce shadow-md">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -221,25 +230,25 @@ export default function Navbar({ title }: NavbarProps) {
 
           {/* Dropdown Panel */}
           {isOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[#0b1120] border border-[#1e2538] rounded-2xl shadow-2xl shadow-black/80 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="p-3.5 border-b border-[#1e2538] flex justify-between items-center bg-[#080d1a]">
                 <div>
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Pusat Notifikasi Alert</h3>
-                  <p className="text-[11px] text-slate-500">{unreadCount} notifikasi belum dibaca</p>
+                  <h3 className="text-xs font-serif-luxury font-bold text-[#e5c483] uppercase tracking-[0.16em]">Pusat Notifikasi</h3>
+                  <p className="text-[10px] font-mono text-slate-400">{unreadCount} notifikasi belum dibaca</p>
                 </div>
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllRead}
-                    className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1"
+                    className="text-xs text-[#e5c483] hover:underline font-serif-luxury tracking-wider uppercase text-[10px] flex items-center gap-1"
                   >
-                    <CheckCheck size={14} /> Tandai Semua Dibaca
+                    <CheckCheck size={13} /> Tandai Dibaca
                   </button>
                 )}
               </div>
 
-              <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+              <div className="max-h-80 overflow-y-auto divide-y divide-[#1e2538]">
                 {notifications.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 text-xs">
+                  <div className="py-8 text-center text-slate-500 text-xs font-mono">
                     Tidak ada notifikasi sistem saat ini.
                   </div>
                 ) : (
@@ -247,8 +256,8 @@ export default function Navbar({ title }: NavbarProps) {
                     <div
                       key={n.id}
                       onClick={() => handleClickNotification(n)}
-                      className={`p-3.5 flex items-start gap-3 hover:bg-slate-50 cursor-pointer transition ${
-                        !n.is_read ? 'bg-amber-50/40 font-semibold' : 'text-slate-600'
+                      className={`p-3.5 flex items-start gap-3 hover:bg-[#141d33] cursor-pointer transition ${
+                        !n.is_read ? 'bg-[#0f182e]/70 font-semibold' : 'text-slate-300'
                       }`}
                     >
                       {getNotificationIcon(n.type)}

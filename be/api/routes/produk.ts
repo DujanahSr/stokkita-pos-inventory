@@ -19,6 +19,7 @@ router.get("/", async (req: Request, res: Response) => {
         p.id,
         p.name,
         p.category,
+        p.image_url,
         p.created_at,
         COALESCE(
           json_agg(
@@ -87,7 +88,7 @@ router.post("/", async (req: Request, res: Response) => {
   const client = await pool.connect();
   try {
     const { tenant_id } = req.user as any;
-    const { name, category, variants } = req.body;
+    const { name, category, image_url, variants } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: "Nama produk wajib diisi" });
@@ -101,10 +102,10 @@ router.post("/", async (req: Request, res: Response) => {
 
     // 1. Insert Product
     const pRes = await client.query(`
-      INSERT INTO products (tenant_id, name, category)
-      VALUES ($1, $2, $3)
+      INSERT INTO products (tenant_id, name, category, image_url)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
-    `, [tenant_id, name.trim(), category ? category.trim() : "Umum"]);
+    `, [tenant_id, name.trim(), category ? category.trim() : "Umum", image_url || null]);
 
     const product = pRes.rows[0];
 
@@ -191,7 +192,7 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { tenant_id } = req.user as any;
     const { id } = req.params;
-    const { name, category } = req.body;
+    const { name, category, image_url } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: "Nama produk tidak boleh kosong" });
@@ -199,10 +200,10 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     const result = await pool.query(`
       UPDATE products
-      SET name = $1, category = $2
-      WHERE id = $3 AND tenant_id = $4
+      SET name = $1, category = $2, image_url = COALESCE($3, image_url)
+      WHERE id = $4 AND tenant_id = $5
       RETURNING *
-    `, [name.trim(), category ? category.trim() : "Umum", id, tenant_id]);
+    `, [name.trim(), category ? category.trim() : "Umum", image_url !== undefined ? image_url : null, id, tenant_id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Produk tidak ditemukan" });
