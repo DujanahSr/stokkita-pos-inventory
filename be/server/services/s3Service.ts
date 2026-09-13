@@ -8,9 +8,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsDir = path.join(__dirname, "../../uploads");
 
-// Ensure local uploads directory exists for fallback
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+// Ensure local uploads directory exists for fallback (safe for read-only serverless environments like Vercel)
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (_e) {
+  // Ignored in read-only serverless environments
 }
 
 const region = process.env.AWS_REGION || "ap-southeast-1"; // Default to Jakarta/Singapore
@@ -129,9 +133,11 @@ export const s3Service = {
 
     // Mode 2: Local Storage Fallback
     const localTargetDir = path.join(uploadsDir, folder);
-    if (!fs.existsSync(localTargetDir)) {
-      fs.mkdirSync(localTargetDir, { recursive: true });
-    }
+    try {
+      if (!fs.existsSync(localTargetDir)) {
+        fs.mkdirSync(localTargetDir, { recursive: true });
+      }
+    } catch (_e) {}
 
     const localFilePath = path.join(localTargetDir, `${Date.now()}-${sanitizedName}`);
     fs.writeFileSync(localFilePath, buffer);
