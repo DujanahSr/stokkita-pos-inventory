@@ -21,8 +21,9 @@ services:
       dockerfile: Dockerfile
     container_name: stokkita_backend
     restart: always
+    # Port dikunci ke loopback lokal (127.0.0.1) agar tidak terekspos ke IP publik VPS
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -66,9 +67,10 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: stokkita_rabbitmq
     restart: always
+    # Port dikunci ke loopback lokal (127.0.0.1) agar antrean & dashboard RabbitMQ tidak bisa diakses dari internet publik
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     networks:
       - stokkita_network
 
