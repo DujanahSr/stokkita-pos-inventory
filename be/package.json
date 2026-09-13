@@ -5,9 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.cjs",
-		"dev": "tsx watch api/index.ts",
+		"dev": "tsx watch server/index.ts",
 		"build": "tsc",
-		"start": "node dist/api/index.js"
+		"start": "node dist/server/index.js"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "^3.1124.0",

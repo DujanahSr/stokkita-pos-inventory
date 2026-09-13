@@ -32,4 +32,4 @@ RUN mkdir -p uploads
 
 EXPOSE 3000
 
-CMD ["node", "dist/api/index.js"]
+CMD ["node", "dist/server/index.js"]

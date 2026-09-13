@@ -3,7 +3,7 @@ import {
   calculateReorderPoint, 
   calculateEOQ, 
   calculateDynamicInventoryMetrics 
-} from '../api/utils/stockUtils.js';
+} from '../server/utils/stockUtils.js';
 
 describe('Stock Utilities (Industrial Engineering Formulas)', () => {
   describe('calculateSafetyStock', () => {

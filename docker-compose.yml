@@ -81,7 +81,7 @@ services:
       dockerfile: Dockerfile
     container_name: stokkita_worker
     restart: always
-    command: ["node", "dist/api/worker.js"]
+    command: ["node", "dist/server/worker.js"]
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/stokkita_db}
